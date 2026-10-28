@@ -347,10 +347,18 @@ with col_results:
                 else:
                     # Run direct in-memory pipeline with dynamic module reload
                     import importlib
+                    import verilens.core.video
+                    import verilens.detectors.synthetic_image
+                    import verilens.detectors.reuse
                     import verilens.detectors.ocr
+                    import verilens.pipeline.reasoner
                     import verilens.pipeline.web_knowledge
                     import verilens.pipeline.orchestrator
+                    importlib.reload(verilens.core.video)
+                    importlib.reload(verilens.detectors.synthetic_image)
+                    importlib.reload(verilens.detectors.reuse)
                     importlib.reload(verilens.detectors.ocr)
+                    importlib.reload(verilens.pipeline.reasoner)
                     importlib.reload(verilens.pipeline.web_knowledge)
                     importlib.reload(verilens.pipeline.orchestrator)
                     active_pipeline = verilens.pipeline.orchestrator.pipeline

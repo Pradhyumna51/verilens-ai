@@ -18,6 +18,7 @@ from verilens.schemas.response import (
     EvidenceSeverity,
 )
 from verilens.core.logger import get_logger
+from verilens.core.video import extract_video_frames
 
 logger = get_logger("OCRDetector")
 
@@ -89,20 +90,50 @@ class OCRDetector(BaseDetector):
                 summary="Skipped: Image media stream is required for optical character recognition.",
             ), []
 
-        # Validate image decoding
-        try:
-            image = Image.open(io.BytesIO(input_data.media_bytes)).convert("RGB")
-            img_arr = np.array(image)
-        except Exception as exc:
-            return DetectorFinding(
-                detector_id=self.detector_id,
-                detector_name=self.detector_name,
-                status=DetectorStatus.ERROR,
-                manipulation_score=None,
-                confidence=0.0,
-                summary=f"Failed to decode image for OCR extraction: {str(exc)}",
-                error_message=str(exc),
-            ), []
+        is_video = input_data.has_video or bool(
+            input_data.media_filename and input_data.media_filename.lower().endswith((".mp4", ".mov", ".avi", ".webm", ".mkv"))
+        ) or bool(
+            input_data.media_content_type and input_data.media_content_type.startswith("video/")
+        )
+
+        if is_video:
+            try:
+                frames = extract_video_frames(input_data.media_bytes, max_frames=2)
+                if not frames:
+                    return DetectorFinding(
+                        detector_id=self.detector_id,
+                        detector_name=self.detector_name,
+                        status=DetectorStatus.UNCERTAIN,
+                        manipulation_score=None,
+                        confidence=0.20,
+                        summary="Video contains zero decodable frames for OCR text extraction.",
+                    ), []
+                image = Image.fromarray(frames[0]).convert("RGB")
+                img_arr = np.array(image)
+            except Exception as exc:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Failed to extract video frame for OCR: {str(exc)}",
+                    error_message=str(exc),
+                ), []
+        else:
+            try:
+                image = Image.open(io.BytesIO(input_data.media_bytes)).convert("RGB")
+                img_arr = np.array(image)
+            except Exception as exc:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Failed to decode image for OCR extraction: {str(exc)}",
+                    error_message=str(exc),
+                ), []
 
         # Check resolution / variance threshold
         if image.width < 32 or image.height < 32:

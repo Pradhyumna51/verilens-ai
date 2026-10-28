@@ -21,6 +21,7 @@ from verilens.schemas.response import (
     EvidenceSeverity,
 )
 from verilens.core.logger import get_logger
+from verilens.core.video import extract_video_frames
 
 logger = get_logger("ImageReuseDetector")
 
@@ -230,19 +231,50 @@ class MediaReuseDetector(BaseDetector):
                 summary="No visual media provided for reuse inspection.",
             ), []
 
-        try:
-            image = Image.open(io.BytesIO(input_data.media_bytes))
-            width, height = image.size
-        except Exception as exc:
-            return DetectorFinding(
-                detector_id=self.detector_id,
-                detector_name=self.detector_name,
-                status=DetectorStatus.ERROR,
-                manipulation_score=None,
-                confidence=0.0,
-                summary=f"Unable to decode image bytes: {str(exc)}",
-                error_message=str(exc),
-            ), []
+        is_video = input_data.has_video or bool(
+            input_data.media_filename and input_data.media_filename.lower().endswith((".mp4", ".mov", ".avi", ".webm", ".mkv"))
+        ) or bool(
+            input_data.media_content_type and input_data.media_content_type.startswith("video/")
+        )
+
+        if is_video:
+            try:
+                frames = extract_video_frames(input_data.media_bytes, max_frames=1)
+                if not frames:
+                    return DetectorFinding(
+                        detector_id=self.detector_id,
+                        detector_name=self.detector_name,
+                        status=DetectorStatus.UNCERTAIN,
+                        manipulation_score=None,
+                        confidence=0.20,
+                        summary="Video contains zero decodable frames for reuse indexing.",
+                    ), []
+                image = Image.fromarray(frames[0])
+                width, height = image.size
+            except Exception as exc:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Unable to extract video keyframe: {str(exc)}",
+                    error_message=str(exc),
+                ), []
+        else:
+            try:
+                image = Image.open(io.BytesIO(input_data.media_bytes))
+                width, height = image.size
+            except Exception as exc:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Unable to decode image bytes: {str(exc)}",
+                    error_message=str(exc),
+                ), []
 
         # Resolution boundary check (minimum 32x32 for valid provenance hashing)
         if width < 32 or height < 32:

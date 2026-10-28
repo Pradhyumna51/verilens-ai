@@ -53,6 +53,11 @@ class WebKnowledgeVerifier:
         if fact_result:
             return fact_result
 
+        # 3. Check for documented synthetic AI media, benchmarks, or viral hoaxes
+        synthetic_result = self._check_synthetic_meme_or_hoax(claim_text)
+        if synthetic_result:
+            return synthetic_result
+
         return None
 
     def _check_life_status(self, claim_text: str) -> Optional[KnowledgeVerificationResult]:
@@ -457,6 +462,83 @@ class WebKnowledgeVerifier:
 
         except Exception as exc:
             logger.warning(f"Google News RSS check failed: {exc}")
+
+        return None
+
+    def _check_synthetic_meme_or_hoax(self, claim_text: str) -> Optional[KnowledgeVerificationResult]:
+        """
+        Cross-references queries or claims against documented synthetic benchmarks,
+        AI-generated viral videos, and confirmed hoaxes in Wikipedia records.
+        """
+        clean = re.sub(r'\b(?:ai\s+footage|official|hd|1080p|720p|video|audio|footage|clip|news)\b', '', claim_text, flags=re.IGNORECASE)
+        clean = re.sub(r'[\(\)\[\]_+]+', ' ', clean).strip()
+        words = [w for w in clean.split() if len(w) >= 2]
+        if len(words) < 2:
+            return None
+
+        # Try salient candidate queries: full clean phrase and 4-word entity-action subset
+        candidate_queries = [" ".join(words[:6])]
+        if len(words) >= 4:
+            candidate_queries.append(" ".join(words[:4]))
+
+        ai_keywords = [
+            "ai-generated", "text-to-video", "generative video", "deepfake",
+            "artificial intelligence", "synthetic media", "hoax", "satirical",
+            "benchmark for text-to-video", "modelscope", "sora", "runway", "gen-2"
+        ]
+
+        try:
+            for query in candidate_queries:
+                search_url = "https://en.wikipedia.org/w/api.php"
+                params = {
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "utf8": "1",
+                    "format": "json",
+                    "srlimit": 3,
+                }
+                with httpx.Client(timeout=self.timeout) as client:
+                    res = client.get(search_url, params=params, headers=self.headers)
+                if res.status_code != 200:
+                    continue
+
+                hits = res.json().get("query", {}).get("search", [])
+                for hit in hits:
+                    title = hit.get("title", "")
+                    formatted_title = title.replace(" ", "_")
+                    summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{formatted_title}"
+                    with httpx.Client(timeout=self.timeout) as client:
+                        sum_res = client.get(summary_url, headers=self.headers)
+                    if sum_res.status_code != 200:
+                        continue
+
+                    sum_data = sum_res.json()
+                    extract = sum_data.get("extract", "")
+                    desc = sum_data.get("description", "")
+                    combined_text = f"{title} {desc} {extract}".lower()
+
+                    matches_ai = any(k in combined_text for k in ai_keywords)
+                    subject_matches = sum(1 for w in words if len(w) >= 3 and w.lower() in combined_text)
+
+                    if matches_ai and subject_matches >= 2:
+                        summary = (
+                            f"Media/claim matches documented generative AI benchmark or hoax ({title}): {extract[:240]}..."
+                        )
+                        url = sum_data.get("content_urls", {}).get("desktop", {}).get("page", f"https://en.wikipedia.org/wiki/{formatted_title}")
+                        logger.info(f"WebKnowledge: Identified documented synthetic media '{title}' for query '{query}'.")
+                        return KnowledgeVerificationResult(
+                            status="CONTRADICTION",
+                            subject=title,
+                            confidence=0.95,
+                            summary=summary,
+                            source_title=f"Wikipedia Reference Archive ({title})",
+                            source_url=url,
+                            snippet=extract[:300],
+                            contradiction_type="KNOWN_SYNTHETIC_MEDIA",
+                        )
+        except Exception as exc:
+            logger.warning(f"WebKnowledge synthetic media check error: {exc}")
 
         return None
 

@@ -4,6 +4,8 @@ Coordinates detector execution, aggregates findings, synthesizes evidence,
 and generates natural language explanations with transparent limitations.
 """
 
+import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -104,13 +106,25 @@ class AnalysisPipeline:
         if ocr_finding and ocr_finding.metrics:
             ocr_extracted_text = str(ocr_finding.metrics.get("extracted_text", "")).strip()
 
-        # Primary claim text: explicit input text OR extracted visual OCR text
+        # Primary claim text: explicit input text OR extracted visual OCR text OR media filename context
         effective_claim_text = (text or "").strip()
         used_ocr_as_claim = False
+        used_fn_as_claim = False
         if not effective_claim_text and ocr_extracted_text and len(ocr_extracted_text) >= 5:
             effective_claim_text = ocr_extracted_text
             used_ocr_as_claim = True
             logger.info(f"Orchestrator: No headline provided. Using OCR text as claim: '{effective_claim_text[:80]}...'")
+        elif not effective_claim_text and media_filename:
+            fn_base = os.path.splitext(os.path.basename(media_filename))[0]
+            fn_clean = re.sub(r'[\-_+]+', ' ', fn_base)
+            fn_clean = re.sub(r'\((?:AI\s+footage|official|hd|1080p|720p|video|audio)[^)]*\)', '', fn_clean, flags=re.IGNORECASE)
+            fn_clean = re.sub(r'\[[^\]]*\]', '', fn_clean)
+            fn_clean = " ".join(fn_clean.split()).strip()
+            generic_fn = bool(re.match(r'^(?:img|vid|dsc|pxl|screenshot|recording|media|file|image)[\s_\d]*$', fn_clean, flags=re.IGNORECASE))
+            if not generic_fn and len(fn_clean) >= 6:
+                effective_claim_text = fn_clean
+                used_fn_as_claim = True
+                logger.info(f"Orchestrator: No headline or OCR text provided. Using media filename as claim context: '{effective_claim_text}'")
 
         # External Fact-Checking Intelligence (Google Fact Check Tools API)
         fc_records = []
@@ -164,7 +178,8 @@ class AnalysisPipeline:
             findings,
             fact_checks=fc_records,
             web_knowledge=knowledge_res,
-            ocr_claimed_text=ocr_extracted_text if used_ocr_as_claim else None,
+            ocr_claimed_text=effective_claim_text if (used_ocr_as_claim or used_fn_as_claim) else None,
+            context_source_label="Visual Content Analyzed (Native OCR)" if used_ocr_as_claim else ("Media Context Analyzed (Filename)" if used_fn_as_claim else None),
         )
         explanation = self._generate_explanation(findings, all_evidence, overall_assessment)
         limitations = self._derive_limitations(findings, untested_modalities)
@@ -233,6 +248,7 @@ class AnalysisPipeline:
         fact_checks: Optional[List[Any]] = None,
         web_knowledge: Optional[KnowledgeVerificationResult] = None,
         ocr_claimed_text: Optional[str] = None,
+        context_source_label: Optional[str] = None,
     ) -> OverallAssessment:
         scored_findings = [
             f for f in findings.values()
@@ -243,8 +259,9 @@ class AnalysisPipeline:
         basis_sources: List[str] = []
 
         if ocr_claimed_text:
+            label = context_source_label or "Visual Content Analyzed (Native OCR)"
             basis_sources.append(
-                f"Visual Content Analyzed (Native OCR): \"{ocr_claimed_text[:110]}...\""
+                f"{label}: \"{ocr_claimed_text[:110]}...\""
             )
 
         # Only DIRECT MATCH debunks can be treated as a debunk of the user's input!

@@ -23,6 +23,9 @@ from verilens.schemas.response import (
     Explanation,
 )
 
+from verilens.core.logger import get_logger
+from verilens.core.video import extract_video_frames, frame_to_jpeg_bytes
+
 logger = get_logger("MultimodalReasoner")
 
 
@@ -80,33 +83,45 @@ class MultimodalReasoner:
             ]
             fc_text = "\nVERIFIED EXTERNAL FACT-CHECKS (CLAIMREVIEW ARCHIVES):\n" + "\n".join(fc_lines) + "\n"
 
-        has_media = bool(media_bytes and media_content_type)
-        media_instruction = (
-            "An image is attached. You may reference visual observations from the attached image only."
-            if has_media else
-            "NO image or video is attached. Do NOT speculate about visual content you cannot see. "
-            "Base your analysis ONLY on the text claim and the local forensic telemetry below."
-        )
+        is_video = bool(media_bytes and media_content_type and media_content_type.startswith("video/"))
+        is_image = bool(media_bytes and media_content_type and media_content_type.startswith("image/"))
+        has_media = is_image or is_video
+
+        if is_video:
+            media_instruction = (
+                "Video frames from the uploaded media are attached in chronological sequence. "
+                "Carefully inspect the facial anatomy, eyes, mouth movement, object interactions, "
+                "temporal consistency, and any visual morphing, melting, unnatural blurring, or generative AI "
+                "video synthesis artifacts (e.g. ModelScope, Sora, Runway, Gen-2, or benchmark memes like the Will Smith eating spaghetti test)."
+            )
+        elif is_image:
+            media_instruction = (
+                "An image is attached. You may reference visual observations from the attached image directly."
+            )
+        else:
+            media_instruction = (
+                "NO image or video is attached. Base your analysis ONLY on the text claim and the local forensic telemetry below."
+            )
 
         prompt_text = (
-            "You are a forensic analysis advisor. Your role is ADVISORY — your output will be merged "
-            "with local algorithmic forensic signals, not used as the sole authority.\n\n"
+            "You are a multimodal forensic verification expert. Your role is to synthesize visual media observations "
+            "with local algorithmic telemetry to produce an objective, accurate verdict.\n\n"
             "CRITICAL RULES:\n"
-            "- Base your analysis PRIMARILY on the LOCAL FORENSIC TELEMETRY provided below.\n"
-            "- Do NOT invent or hallucinate forensic observations not supported by the telemetry data.\n"
-            "- If local signals show low manipulation scores, do NOT override them with speculation.\n"
-            "- If you are uncertain, say UNCERTAIN. Do not guess.\n"
+            "- Cross-reference the LOCAL FORENSIC TELEMETRY with direct visual observations from the attached media.\n"
+            "- Carefully inspect attached visual media for generative AI artifacts (e.g. morphing facial features, distorted anatomy, melting food/objects, impossible physical physics, or famous AI video benchmarks like the Will Smith eating spaghetti test).\n"
+            "- If the media clearly depicts an AI-generated video or synthetic image, flag it as SUSPICIOUS or LIKELY_MANIPULATED with high confidence, even if individual algorithmic detectors report low scores.\n"
+            "- Do NOT invent claims not in the text, but accurately describe observed visual distortions.\n"
+            "- If you are genuinely uncertain, return UNCERTAIN.\n"
             "- When local detectors report conflicting signals, acknowledge the conflict.\n\n"
             f"MEDIA STATUS: {media_instruction}\n\n"
             f"CLAIM / CAPTION TEXT:\n\"\"\"{text or '[No text provided]'}\"\"\"\n\n"
             f"LOCAL FORENSIC TELEMETRY (from algorithmic detectors):\n{signals_text}\n"
             f"{fc_text}\n"
             "ANALYSIS TASKS:\n"
-            "1. Evaluate whether the local forensic signals support or contradict the claim.\n"
-            "2. If verified external fact-checks are provided above, cite the publisher and rating.\n"
-            "3. If an image is attached, note any visual observations relevant to the claim. "
-            "Do NOT assert AI generation or deepfake unless local telemetry corroborates it.\n"
-            "4. Provide a balanced, objective assessment with counter-evidence where applicable.\n\n"
+            "1. Evaluate whether the visual media exhibits generative AI synthesis, morphing, face replacement, or physical anomalies.\n"
+            "2. Cross-reference visual observations with the local algorithmic detector scores below.\n"
+            "3. If verified external fact-checks or known AI memes/benchmarks match the claim, cite them explicitly.\n"
+            "4. Provide a balanced, objective assessment with decisive evidence.\n\n"
             "Output MUST be strict JSON matching this exact structure:\n"
             "{\n"
             "  \"verdict\": \"LIKELY_REAL\" | \"SUSPICIOUS\" | \"LIKELY_MANIPULATED\" | \"UNCERTAIN\",\n"
@@ -131,8 +146,8 @@ class MultimodalReasoner:
 
         parts: List[Dict[str, Any]] = [{"text": prompt_text}]
 
-        # Attach image if provided
-        if media_bytes and media_content_type and media_content_type.startswith("image/"):
+        # Attach image or video frames if provided
+        if is_image and media_bytes:
             b64_img = base64.b64encode(media_bytes).decode("utf-8")
             parts.append({
                 "inline_data": {
@@ -140,6 +155,20 @@ class MultimodalReasoner:
                     "data": b64_img,
                 }
             })
+        elif is_video and media_bytes:
+            try:
+                frames = extract_video_frames(media_bytes, max_frames=4, max_dimension=720)
+                for f in frames:
+                    jpeg_bytes = frame_to_jpeg_bytes(f, quality=80)
+                    b64_f = base64.b64encode(jpeg_bytes).decode("utf-8")
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": b64_f,
+                        }
+                    })
+            except Exception as exc:
+                logger.warning(f"Failed to attach video frames to Gemini reasoner: {exc}")
 
         payload = {
             "contents": [

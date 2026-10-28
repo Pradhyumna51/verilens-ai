@@ -22,6 +22,7 @@ from verilens.schemas.response import (
     EvidenceSeverity,
 )
 from verilens.core.logger import get_logger
+from verilens.core.video import extract_video_frames
 
 logger = get_logger("SyntheticImageDetector")
 
@@ -220,8 +221,10 @@ class SyntheticImageDetector(BaseDetector):
                     summary="Required pretrained AI-image model is unavailable or disabled; execution reported as NOT_RUN per contract.",
                 ), []
 
+    def _analyze_single_pil_image(
+        self, image_raw: Image.Image, model: Optional[PretrainedImageClassifier]
+    ) -> Tuple[DetectorFinding, List[EvidenceItem]]:
         try:
-            image_raw = Image.open(io.BytesIO(input_data.media_bytes))
             image = image_raw.convert("L")
             img_arr = np.array(image, dtype=np.float32)
             height, width = img_arr.shape
@@ -466,3 +469,138 @@ class SyntheticImageDetector(BaseDetector):
             metrics=metrics,
         )
         return finding, evidence
+
+    def _execute(self, input_data: DetectorInput) -> Tuple[DetectorFinding, List[EvidenceItem]]:
+        if not input_data.media_bytes:
+            return DetectorFinding(
+                detector_id=self.detector_id,
+                detector_name=self.detector_name,
+                status=DetectorStatus.NOT_RUN,
+                manipulation_score=None,
+                confidence=0.0,
+                summary="No visual media provided for synthetic artifact analysis.",
+            ), []
+
+        # If a pretrained model is strictly required but unavailable, report NOT_RUN or ERROR per contract
+        model = self._get_lazy_model()
+        if self._require_pretrained and model is None:
+            if self._model_load_error:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Required pretrained AI-image classifier failed to load: {self._model_load_error}",
+                    error_message=self._model_load_error,
+                ), []
+            else:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.NOT_RUN,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary="Required pretrained AI-image model is unavailable or disabled; execution reported as NOT_RUN per contract.",
+                ), []
+
+        is_video = input_data.has_video or bool(
+            input_data.media_filename and input_data.media_filename.lower().endswith((".mp4", ".mov", ".avi", ".webm", ".mkv"))
+        ) or bool(
+            input_data.media_content_type and input_data.media_content_type.startswith("video/")
+        )
+
+        if is_video:
+            try:
+                frames = extract_video_frames(input_data.media_bytes, max_frames=5)
+            except Exception as exc:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.ERROR,
+                    manipulation_score=None,
+                    confidence=0.0,
+                    summary=f"Failed to extract video frames for synthetic evaluation: {str(exc)}",
+                    error_message=str(exc),
+                ), []
+
+            if not frames:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.UNCERTAIN,
+                    manipulation_score=None,
+                    confidence=0.20,
+                    summary="No decodable frames found in the video container.",
+                ), []
+
+            findings_list: List[DetectorFinding] = []
+            all_evidence: List[EvidenceItem] = []
+            for frame_idx, frame_rgb in enumerate(frames):
+                pil_f = Image.fromarray(frame_rgb)
+                finding_f, ev_f = self._analyze_single_pil_image(pil_f, model)
+                if finding_f.status == DetectorStatus.SUCCESS and finding_f.manipulation_score is not None:
+                    findings_list.append(finding_f)
+                    for item in ev_f:
+                        item_copy = item.model_copy()
+                        item_copy.id = f"{item.id}_f{frame_idx}"
+                        all_evidence.append(item_copy)
+
+            if not findings_list:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.UNCERTAIN,
+                    manipulation_score=None,
+                    confidence=0.30,
+                    summary=f"Evaluated {len(frames)} frames; insufficient textural variation for spectral inspection.",
+                ), []
+
+            scores = [f.manipulation_score for f in findings_list if f.manipulation_score is not None]
+            confs = [f.confidence for f in findings_list]
+            max_score = max(scores)
+            avg_score = float(np.mean(scores))
+            # Synthesis in any key frame sequence indicates generative video
+            final_score = round(0.7 * max_score + 0.3 * avg_score, 2)
+            final_conf = round(float(np.mean(confs)), 2)
+
+            agg_metrics: Dict[str, Any] = {
+                "frames_analyzed": len(frames),
+                "max_frame_manipulation_score": max_score,
+                "mean_frame_manipulation_score": round(avg_score, 2),
+                "sample_resolution": findings_list[0].metrics.get("resolution", "unknown"),
+            }
+            if "high_frequency_ratio" in findings_list[0].metrics:
+                agg_metrics["high_frequency_ratio"] = round(float(np.mean([f.metrics.get("high_frequency_ratio", 0.0) for f in findings_list])), 3)
+            if "laplacian_variance" in findings_list[0].metrics:
+                agg_metrics["laplacian_variance"] = round(float(np.mean([f.metrics.get("laplacian_variance", 0.0) for f in findings_list])), 1)
+
+            summary = (
+                f"Evaluated {len(frames)} video frames for generative synthesis and diffusion artifacts. "
+                f"Peak frame manipulation score: {max_score:.2f} (mean: {avg_score:.2f})."
+            )
+
+            return DetectorFinding(
+                detector_id=self.detector_id,
+                detector_name=self.detector_name,
+                status=DetectorStatus.SUCCESS,
+                manipulation_score=final_score,
+                confidence=final_conf,
+                summary=summary,
+                metrics=agg_metrics,
+            ), all_evidence
+
+        try:
+            image_raw = Image.open(io.BytesIO(input_data.media_bytes))
+        except Exception as exc:
+            return DetectorFinding(
+                detector_id=self.detector_id,
+                detector_name=self.detector_name,
+                status=DetectorStatus.ERROR,
+                manipulation_score=None,
+                confidence=0.0,
+                summary=f"Failed to process image array: {str(exc)}",
+                error_message=str(exc),
+            ), []
+
+        return self._analyze_single_pil_image(image_raw, model)
