@@ -22,6 +22,7 @@ from verilens.detectors.media_reuse import MediaReuseDetector
 from verilens.detectors.synthetic_image import SyntheticImageDetector
 from verilens.detectors.consistency import ConsistencyDetector
 from verilens.detectors.deepfake import DeepfakeDetector
+from verilens.detectors.ocr import OCRDetector
 from verilens.schemas.response import DetectorStatus, Verdict, RiskLevel
 from verilens.core.config import settings
 
@@ -52,13 +53,14 @@ class TestHealthEndpoint:
         assert data["version"] == "1.0.0"
         assert "limits" in data
         assert data["limits"]["max_media_size_bytes"] == settings.MAX_MEDIA_SIZE_BYTES
-        assert len(data["detectors"]) == 5
+        assert len(data["detectors"]) == 6
         detector_ids = [d["id"] for d in data["detectors"]]
         assert "consistency" in detector_ids
         assert "media_reuse" in detector_ids
         assert "synthetic_image" in detector_ids
         assert "synthetic_text" in detector_ids
         assert "deepfake" in detector_ids
+        assert "ocr_detector" in detector_ids
 
 class TestAnalyzeEndpoint:
     def test_analyze_empty_request_returns_400(self):
@@ -103,6 +105,7 @@ class TestAnalyzeEndpoint:
         assert data["findings"]["synthetic_image"]["status"] == "NOT_RUN"
         assert data["findings"]["media_reuse"]["status"] == "NOT_RUN"
         assert data["findings"]["consistency"]["status"] == "NOT_RUN"
+        assert data["findings"]["ocr_detector"]["status"] == "NOT_RUN"
 
     def test_analyze_multimodal_request(self):
         text = (
@@ -126,6 +129,7 @@ class TestAnalyzeEndpoint:
         assert data["findings"]["media_reuse"]["status"] == "SUCCESS"
         assert data["findings"]["synthetic_image"]["status"] == "SUCCESS"
         assert data["findings"]["synthetic_text"]["status"] == "SUCCESS"
+        assert data["findings"]["ocr_detector"]["status"] == "SUCCESS"
 
 class TestDetectorStatuses:
     """Verifies that all detectors correctly support NOT_RUN, UNCERTAIN, ERROR, and SUCCESS."""
@@ -133,7 +137,7 @@ class TestDetectorStatuses:
     def test_not_run_status(self):
         empty_input = DetectorInput(text=None, media_bytes=None)
         
-        for det in [ConsistencyDetector(), MediaReuseDetector(), SyntheticImageDetector(), SyntheticTextDetector(), DeepfakeDetector()]:
+        for det in [ConsistencyDetector(), MediaReuseDetector(), SyntheticImageDetector(), SyntheticTextDetector(), DeepfakeDetector(), OCRDetector()]:
             finding, evidence = det.run(empty_input)
             assert finding.status == DetectorStatus.NOT_RUN
             assert finding.manipulation_score is None
