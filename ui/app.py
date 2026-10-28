@@ -47,6 +47,7 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
     :root {
         --canvas-bg: #0d1117;
@@ -76,12 +77,35 @@ st.markdown(
         background: transparent !important;
     }
 
-    *, *::before, *::after,
-    html, body, .stApp,
-    p, span, div, h1, h2, h3, h4, h5, h6,
-    label, button, input, textarea, select {
-        font-family: var(--font-stack) !important;
+    html, body, .stApp {
+        font-family: var(--font-stack);
         -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6, p, label, input, textarea {
+        font-family: var(--font-stack) !important;
+    }
+
+    /* Explicitly preserve Streamlit icon fonts and ligatures (carets, expanders, dropdowns) */
+    [data-testid*="Icon"],
+    [data-testid*="icon"],
+    [data-testid="stExpanderToggleIcon"],
+    [data-testid="stExpanderToggleIcon"] *,
+    [data-testid="stIconMaterial"],
+    .material-symbols-rounded,
+    .material-symbols-sharp,
+    .material-symbols-outlined,
+    [class*="material-symbols"],
+    [class*="material-icons"] {
+        font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+        font-feature-settings: "liga" 1 !important;
+        font-style: normal !important;
+        letter-spacing: normal !important;
+        text-transform: none !important;
+        display: inline-block !important;
+        white-space: nowrap !important;
+        word-wrap: normal !important;
+        direction: ltr !important;
     }
 
     code, pre, .font-mono, [data-testid="stMetricValue"], .stat-pill, .detector-metrics {
