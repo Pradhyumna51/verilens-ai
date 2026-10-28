@@ -102,12 +102,11 @@ class PretrainedDeepfakeClassifier(ABC):
         pass
 
 
-class CalibratedFaceArtifactClassifier(PretrainedDeepfakeClassifier):
+class StatisticalFaceArtifactClassifier(PretrainedDeepfakeClassifier):
     """
-    Calibrated lightweight face-forgery classifier.
-    Evaluates boundary seam gradient, chroma delta, and high-frequency edge transition
-    on facial crops against empirical face-swap distributions.
-    Runs real inference without external network downloads.
+    Statistical heuristic face-forgery classifier (NOT pretrained on labeled data).
+    Evaluates boundary seam gradient, chroma delta, and edge transitions
+    using hand-tuned logistic weights. Scores are approximate, not validated.
     """
 
     def __init__(self):
@@ -165,7 +164,7 @@ class CalibratedFaceArtifactClassifier(PretrainedDeepfakeClassifier):
         features = np.array([blur_feature, discontinuity_feature, chroma_diff], dtype=np.float32)
         logit = float(np.dot(self.weights, features) + self.bias)
         prob = 1.0 / (1.0 + np.exp(-logit))
-        conf = float(np.clip(2.0 * abs(prob - 0.5) * 0.35 + 0.60, 0.55, 0.90))
+        conf = float(np.clip(2.0 * abs(prob - 0.5) * 0.25 + 0.40, 0.35, 0.65))
         return float(prob), conf
 
 
@@ -211,7 +210,7 @@ class DeepfakeDetector(BaseDetector):
                 self._pretrained_model = self._custom_classifier
             elif self._use_default_classifier:
                 try:
-                    self._pretrained_model = CalibratedFaceArtifactClassifier()
+                    self._pretrained_model = StatisticalFaceArtifactClassifier()
                 except Exception as exc:
                     logger.warning(f"Failed to instantiate default deepfake classifier: {exc}")
                     self._pretrained_model = None

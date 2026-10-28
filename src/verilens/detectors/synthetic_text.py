@@ -38,11 +38,11 @@ class PretrainedTextClassifier(ABC):
         pass
 
 
-class CalibratedTextFeatureClassifier(PretrainedTextClassifier):
+class StatisticalTextHeuristicClassifier(PretrainedTextClassifier):
     """
-    Calibrated lightweight text classifier evaluating statistical burstiness,
-    lexical diversity, perplexity proxy, and stylistic marker frequency.
-    Runs real inference without external network downloads.
+    Statistical heuristic text classifier (NOT pretrained on labeled data).
+    Evaluates burstiness, lexical diversity, bigram repetition, and marker frequency
+    using hand-tuned logistic weights. Scores are approximate, not validated.
     """
 
     def __init__(self):
@@ -92,7 +92,7 @@ class CalibratedTextFeatureClassifier(PretrainedTextClassifier):
         features = np.array([low_burstiness, low_ttr, bigram_rep, marker_density], dtype=np.float32)
         logit = float(np.dot(self.weights, features) + self.bias)
         prob = 1.0 / (1.0 + np.exp(-logit))
-        conf = float(np.clip(2.0 * abs(prob - 0.5) * 0.35 + 0.60, 0.55, 0.92))
+        conf = float(np.clip(2.0 * abs(prob - 0.5) * 0.25 + 0.40, 0.35, 0.65))
         return float(prob), conf
 
 
@@ -125,7 +125,7 @@ class SyntheticTextDetector(BaseDetector):
                 self._pretrained_model = self._custom_classifier
             elif self._use_default_classifier:
                 try:
-                    self._pretrained_model = CalibratedTextFeatureClassifier()
+                    self._pretrained_model = StatisticalTextHeuristicClassifier()
                 except Exception as exc:
                     logger.warning(f"Failed to instantiate default text classifier: {exc}")
                     self._pretrained_model = None
@@ -234,6 +234,29 @@ class SyntheticTextDetector(BaseDetector):
         if bigram_repetition > 0.25:
             synthetic_signal += 0.20
 
+        # Dual Emotion & Sensationalist Style Analysis (WWW 2021)
+        sensationalist_terms = [
+            r"\bshocking\b",
+            r"\bunbelievable\b",
+            r"\bcatastrophic\b",
+            r"\bexposed\b",
+            r"\bbombshell\b",
+            r"\bterrifying\b",
+            r"\burgent alert\b",
+            r"\bsecret truth\b",
+            r"\bmiracle cure\b",
+            r"\bmind-blowing\b",
+            r"\bdisaster strikes\b",
+            r"\bpanic\b",
+        ]
+        sensationalist_hits = sum(1 for p in sensationalist_terms if re.search(p, text, re.IGNORECASE))
+        exclamation_count = text.count("!")
+        uppercase_words = [w for w in words if len(w) >= 3 and w.isupper()]
+        uppercase_ratio = len(uppercase_words) / max(1, len(words))
+
+        # Arousal score combines sensationalist lexicon, exclamation punctuation, and uppercase tokens
+        emotional_arousal = min(1.0, (sensationalist_hits * 0.25) + (min(3, exclamation_count) * 0.15) + (uppercase_ratio * 2.0))
+
         evidence: List[EvidenceItem] = []
         metrics: Dict[str, Any] = {
             "word_count": word_count,
@@ -242,7 +265,28 @@ class SyntheticTextDetector(BaseDetector):
             "type_token_ratio": round(ttr, 3),
             "bigram_repetition": round(bigram_repetition, 3),
             "marker_hits": marker_hits,
+            "sensationalism_hits": sensationalist_hits,
+            "emotional_arousal_score": round(emotional_arousal, 3),
         }
+
+        if emotional_arousal >= 0.50:
+            evidence.append(
+                EvidenceItem(
+                    id="ev_emotional_arousal",
+                    detector_id=self.detector_id,
+                    evidence_type="EMOTIONAL_DISSONANCE",
+                    description=(
+                        f"Text exhibits heightened emotional arousal and sensationalist rhetoric "
+                        f"(arousal index: {emotional_arousal:.2f}, exclamation points: {exclamation_count}, sensationalist keywords: {sensationalist_hits})."
+                    ),
+                    severity=EvidenceSeverity.MEDIUM,
+                    metadata={
+                        "emotional_arousal": round(emotional_arousal, 2),
+                        "exclamation_count": exclamation_count,
+                        "uppercase_ratio": round(uppercase_ratio, 2),
+                    },
+                )
+            )
 
         if model_prob is not None:
             metrics["pretrained_classifier_score"] = round(model_prob, 3)

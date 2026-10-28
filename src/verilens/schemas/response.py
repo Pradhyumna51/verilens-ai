@@ -56,6 +56,7 @@ class OverallAssessment(BaseModel):
     risk_level: RiskLevel = Field(..., description="Assessed misinformation risk level")
     summary: str = Field(..., description="Executive narrative summary")
     primary_concerns: List[str] = Field(default_factory=list, description="List of primary detected issues")
+    basis_sources: List[str] = Field(default_factory=list, description="Specific factual and algorithmic sources grounding this assessment")
 
 class Explanation(BaseModel):
     headline: str = Field(..., description="One-line explanation headline")

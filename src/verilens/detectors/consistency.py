@@ -59,7 +59,7 @@ class ConsistencyDetector(BaseDetector):
             self._clip_attempted = True
             try:
                 from transformers import CLIPProcessor, CLIPModel
-                model_name = "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
+                model_name = "openai/clip-vit-base-patch32"
                 logger.info(f"Attempting to load CLIP model: {model_name}")
                 self._clip_processor = CLIPProcessor.from_pretrained(model_name)
                 self._clip_model = CLIPModel.from_pretrained(model_name)
@@ -180,9 +180,11 @@ class ConsistencyDetector(BaseDetector):
                 clip_similarity = None
 
         if clip_similarity is None:
-            clip_similarity = self._compute_algorithmic_clip_proxy(text_lower, img_arr)
+            # No CLIP available — cannot compute meaningful semantic similarity
+            # ponytail: return UNCERTAIN, don't fake it with color math
+            clip_similarity = None  # Leave as None to signal no semantic data
 
-        metrics["clip_similarity"] = round(clip_similarity, 3)
+        metrics["clip_similarity"] = round(clip_similarity, 3) if clip_similarity is not None else None
         metrics["clip_backend"] = clip_backend
 
         # -------------------------------------------------------------
@@ -199,10 +201,11 @@ class ConsistencyDetector(BaseDetector):
                 generated_caption = blip_processor.decode(out[0], skip_special_tokens=True).strip()
                 caption_backend = "pretrained_blip"
             except Exception as e:
-                logger.warning(f"BLIP generation failed: {e}. Using scene descriptor.")
-                generated_caption = self._synthesize_scene_descriptor(img_arr)
+                logger.warning(f"BLIP generation failed: {e}. No caption available.")
+                generated_caption = ""
         else:
-            generated_caption = self._synthesize_scene_descriptor(img_arr)
+            # ponytail: no BLIP → empty caption, don't synthesize from pixel means
+            generated_caption = ""
 
         metrics["generated_caption"] = generated_caption
         metrics["caption_backend"] = caption_backend
@@ -245,27 +248,27 @@ class ConsistencyDetector(BaseDetector):
         # Luminance contradiction
         if text_has_night and luminance > 160.0:
             mismatches.append(f"Caption claims nighttime/dark setting, but visual media exhibits high daytime luminance ({luminance:.1f}).")
-            mismatch_penalty += 0.45
+            mismatch_penalty += 0.20
             evidence.append(
                 EvidenceItem(
                     id="ev_mismatch_luminance",
                     detector_id=self.detector_id,
-                    evidence_type="CROSS_MODAL_MISMATCH",
-                    description=f"Inversion between night assertion and daylight luminance ({luminance:.1f}).",
-                    severity=EvidenceSeverity.HIGH,
+                    evidence_type="HEURISTIC_SIGNAL",
+                    description=f"Heuristic: night assertion vs daylight luminance ({luminance:.1f}).",
+                    severity=EvidenceSeverity.MEDIUM,
                     metadata={"observed_luminance": round(luminance, 1), "claimed_environment": "night"},
                 )
             )
         elif text_has_day and luminance < 40.0:
             mismatches.append(f"Caption claims sunny/daylight conditions, but visual scene has low luminance ({luminance:.1f}).")
-            mismatch_penalty += 0.40
+            mismatch_penalty += 0.15
             evidence.append(
                 EvidenceItem(
                     id="ev_mismatch_darkness",
                     detector_id=self.detector_id,
-                    evidence_type="CROSS_MODAL_MISMATCH",
-                    description=f"Daylight claim contradicts low visual luminance ({luminance:.1f}).",
-                    severity=EvidenceSeverity.HIGH,
+                    evidence_type="HEURISTIC_SIGNAL",
+                    description=f"Heuristic: daylight claim vs low luminance ({luminance:.1f}).",
+                    severity=EvidenceSeverity.MEDIUM,
                     metadata={"observed_luminance": round(luminance, 1), "claimed_environment": "daylight"},
                 )
             )
@@ -274,24 +277,66 @@ class ConsistencyDetector(BaseDetector):
         if text_has_fire:
             red_ratio = mean_r / (mean_b + 1e-5)
             if red_ratio < 0.95 and mean_b > 110.0:
-                mismatches.append(f"Caption asserts active fire/inferno, but visual spectrum is predominantly blue/cool (R/B ratio: {red_ratio:.2f}).")
-                mismatch_penalty += 0.40
+                mismatches.append(f"Caption asserts fire/inferno, but visual spectrum is predominantly blue/cool (R/B ratio: {red_ratio:.2f}).")
+                mismatch_penalty += 0.15
                 evidence.append(
                     EvidenceItem(
                         id="ev_mismatch_fire_spectrum",
                         detector_id=self.detector_id,
-                        evidence_type="CROSS_MODAL_MISMATCH",
-                        description=f"Absence of warm chromatic signature for claimed fire event (R/B ratio: {red_ratio:.2f}).",
-                        severity=EvidenceSeverity.HIGH,
+                        evidence_type="HEURISTIC_SIGNAL",
+                        description=f"Heuristic: no warm chromatic signature for claimed fire (R/B ratio: {red_ratio:.2f}).",
+                        severity=EvidenceSeverity.MEDIUM,
                         metadata={"rb_ratio": round(red_ratio, 2)},
                     )
                 )
 
+        # Snow / winter condition contradiction
+        snow_keywords = {"snow", "blizzard", "snowfall", "ice storm", "frozen lake"}
+        text_has_snow = any(k in text_lower for k in snow_keywords)
+        if text_has_snow:
+            if luminance < 75.0 or (mean_r > 150.0 and mean_b < 100.0):
+                mismatches.append(f"Caption asserts heavy snow/blizzard, but visual scene lacks bright reflective spectrum (luminance: {luminance:.1f}).")
+                mismatch_penalty += 0.15
+                evidence.append(
+                    EvidenceItem(
+                        id="ev_mismatch_snow_spectrum",
+                        detector_id=self.detector_id,
+                        evidence_type="HEURISTIC_SIGNAL",
+                        description=f"Heuristic: visual tone lacks snow reflectance (luminance: {luminance:.1f}).",
+                        severity=EvidenceSeverity.MEDIUM,
+                        metadata={"luminance": round(luminance, 1), "claimed_environment": "snow"},
+                    )
+                )
+
+        # Crowd / protest contradiction vs barren / low texture
+        crowd_keywords = {"protest", "protesters", "massive crowd", "huge crowd", "thousands marching", "rally in the streets"}
+        text_has_crowd = any(k in text_lower for k in crowd_keywords)
+        if text_has_crowd:
+            gx = np.abs(np.diff(img_arr[:, :, 0], axis=1))
+            gy = np.abs(np.diff(img_arr[:, :, 0], axis=0))
+            edge_density = float(np.mean(gx) + np.mean(gy))
+            metrics["scene_edge_density"] = round(edge_density, 2)
+            if edge_density < 6.0:
+                mismatches.append(f"Caption asserts large crowd/protest, but visual scene displays low edge density ({edge_density:.1f}).")
+                mismatch_penalty += 0.15
+                evidence.append(
+                    EvidenceItem(
+                        id="ev_mismatch_crowd_density",
+                        detector_id=self.detector_id,
+                        evidence_type="HEURISTIC_SIGNAL",
+                        description=f"Heuristic: sparse visual texture ({edge_density:.1f}) vs claimed crowd.",
+                        severity=EvidenceSeverity.MEDIUM,
+                        metadata={"edge_density": round(edge_density, 2)},
+                    )
+                )
+
+        metrics["didan_discrepancy_score"] = round(min(1.0, mismatch_penalty), 3)
+
         # -------------------------------------------------------------
         # 4. Synthesizing Scores & Observations
         # -------------------------------------------------------------
-        # CLIP evidence
-        if clip_similarity < 0.30:
+        # CLIP evidence (only when real CLIP data available)
+        if clip_similarity is not None and clip_similarity < 0.30:
             evidence.append(
                 EvidenceItem(
                     id="ev_clip_semantic_divergence",
@@ -304,7 +349,7 @@ class ConsistencyDetector(BaseDetector):
             )
             model_observations.append(f"CLIP embedding divergence observed (similarity: {clip_similarity:.2f}).")
             mismatch_penalty += 0.35
-        elif clip_similarity >= 0.70:
+        elif clip_similarity is not None and clip_similarity >= 0.70:
             evidence.append(
                 EvidenceItem(
                     id="ev_clip_semantic_alignment",
@@ -344,29 +389,48 @@ class ConsistencyDetector(BaseDetector):
                     )
                 )
 
-        # Compute manipulation score (higher = greater discrepancy/manipulation probability)
-        # Note: manipulation score measures out-of-context or visual-claim inconsistency,
-        # not the absolute factual truth of the underlying real-world event.
-        clip_discrepancy = 1.0 - clip_similarity
-        combined_score = max(clip_discrepancy * 0.5 + mismatch_penalty * 0.5, mismatch_penalty)
+        # Score computation: use CLIP only when available
+        if clip_similarity is not None:
+            clip_discrepancy = 1.0 - clip_similarity
+            combined_score = max(clip_discrepancy * 0.5 + mismatch_penalty * 0.5, mismatch_penalty)
+        else:
+            combined_score = mismatch_penalty
         manipulation_score = float(np.clip(combined_score, 0.10, 0.95))
 
-        confidence = 0.84 if (clip_backend == "pretrained_clip" or caption_backend == "pretrained_blip") else 0.76
+        confidence = 0.82 if (clip_backend == "pretrained_clip" or caption_backend == "pretrained_blip") else 0.45
+
+        # If no CLIP and no BLIP, we have very low confidence — mostly heuristic
+        if clip_similarity is None and caption_backend != "pretrained_blip":
+            # ponytail: without real models, this detector has minimal value
+            manipulation_score = float(np.clip(mismatch_penalty, 0.10, 0.50))  # Cap at 0.50
+            confidence = 0.35
+            if not mismatches:
+                return DetectorFinding(
+                    detector_id=self.detector_id,
+                    detector_name=self.detector_name,
+                    status=DetectorStatus.UNCERTAIN,
+                    manipulation_score=None,
+                    confidence=0.30,
+                    summary="Cross-modal analysis unavailable: CLIP and BLIP models not loaded. Only basic heuristic checks applied.",
+                    metrics=metrics,
+                ), evidence
+
+        clip_str = f"{clip_similarity:.2f}" if clip_similarity is not None else "N/A"
 
         if mismatches:
             summary = (
                 f"Cross-modal discrepancies detected: {'; '.join(mismatches[:2])}. "
-                f"CLIP similarity: {clip_similarity:.2f}. "
+                f"CLIP similarity: {clip_str}. "
                 f"(Note: Similarity reflects text-visual conceptual alignment, not ground-truth veracity)."
             )
-        elif clip_similarity < 0.30:
+        elif clip_similarity is not None and clip_similarity < 0.30:
             summary = (
-                f"Semantic divergence detected between claim and visual media (CLIP similarity: {clip_similarity:.2f}). "
+                f"Semantic divergence detected between claim and visual media (CLIP similarity: {clip_str}). "
                 f"Generated description: '{generated_caption}'."
             )
         else:
             summary = (
-                f"Cross-modal consistency validated (CLIP similarity: {clip_similarity:.2f}, luminance: {luminance:.1f}). "
+                f"Cross-modal consistency validated (CLIP similarity: {clip_str}, luminance: {luminance:.1f}). "
                 f"Generated description: '{generated_caption}'."
             )
 

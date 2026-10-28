@@ -19,7 +19,7 @@ from verilens.detectors.base import DetectorInput
 from verilens.detectors.synthetic_image import (
     SyntheticImageDetector,
     PretrainedImageClassifier,
-    CalibratedFeatureClassifier,
+    StatisticalHeuristicClassifier,
 )
 from verilens.schemas.response import DetectorStatus, EvidenceSeverity
 

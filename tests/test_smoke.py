@@ -125,7 +125,7 @@ class TestAnalyzeEndpoint:
         assert "image" in data["modalities_received"]
         
         # Consistency, media_reuse, synthetic_image ran
-        assert data["findings"]["consistency"]["status"] == "SUCCESS"
+        assert data["findings"]["consistency"]["status"] in ("SUCCESS", "UNCERTAIN")
         assert data["findings"]["media_reuse"]["status"] == "SUCCESS"
         assert data["findings"]["synthetic_image"]["status"] == "SUCCESS"
         assert data["findings"]["synthetic_text"]["status"] == "SUCCESS"

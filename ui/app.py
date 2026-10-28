@@ -345,8 +345,16 @@ with col_results:
                     except Exception as err:
                         st.error(f"Failed to connect to FastAPI at {api_url}: {err}")
                 else:
-                    # Run direct in-memory pipeline
-                    response_data = pipeline.run(
+                    # Run direct in-memory pipeline with dynamic module reload
+                    import importlib
+                    import verilens.detectors.ocr
+                    import verilens.pipeline.web_knowledge
+                    import verilens.pipeline.orchestrator
+                    importlib.reload(verilens.detectors.ocr)
+                    importlib.reload(verilens.pipeline.web_knowledge)
+                    importlib.reload(verilens.pipeline.orchestrator)
+                    active_pipeline = verilens.pipeline.orchestrator.pipeline
+                    response_data = active_pipeline.run(
                         text=input_text,
                         media_bytes=active_media_bytes,
                         media_filename=active_media_name,
@@ -367,49 +375,56 @@ with col_results:
                         else '<span style="display:inline-block; background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid #64748b; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">🛡️ Powered by Local Forensic Ensemble</span>'
                     )
 
+                    basis_html = ""
+                    if getattr(assessment, "basis_sources", None):
+                        items_html = "".join([f"<li style='margin-bottom: 4px; color: #cbd5e1;'>{s}</li>" for s in assessment.basis_sources])
+                        basis_html = (
+                            '<div style="margin-top: 14px; padding: 12px 14px; background: rgba(15, 23, 42, 0.75); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">'
+                            '<div style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">'
+                            '🔍 Verified Basis & Evidence Sources'
+                            '</div>'
+                            f'<ul style="margin: 0; padding-left: 18px; font-size: 0.85rem; line-height: 1.45;">{items_html}</ul>'
+                            '</div>'
+                        )
+
                     # Verdict Card
-                    st.markdown(
-                        f"""
-                        <div class="verdict-card {v_class}">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div>
-                                    <span style="font-size: 0.85rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Overall Verdict</span>
-                                    <h2 style="margin: 4px 0 8px 0; font-size: 1.8rem; font-weight: 800;">
-                                        {assessment.verdict.value.replace('_', ' ')}
-                                    </h2>
-                                </div>
-                                <div style="text-align: right;">
-                                    <span class="badge" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
-                                        RISK: {assessment.risk_level.value}
-                                    </span>
-                                    <div style="margin-top: 6px; font-size: 0.9rem; font-weight: 700; color: #38bdf8;">
-                                        Confidence: {int(assessment.confidence * 100)}%
-                                    </div>
-                                </div>
-                            </div>
-                            <p style="margin: 8px 0 0 0; color: #e2e8f0; font-size: 0.95rem; line-height: 1.5;">
-                                {assessment.summary}
-                            </p>
-                            <div style="margin-top: 12px;">
-                                {engine_badge}
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
+                    card_html = (
+                        f'<div class="verdict-card {v_class}">'
+                        f'<div style="display: flex; justify-content: space-between; align-items: flex-start;">'
+                        f'<div>'
+                        f'<span style="font-size: 0.85rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Overall Verdict</span>'
+                        f'<h2 style="margin: 4px 0 8px 0; font-size: 1.8rem; font-weight: 800;">{assessment.verdict.value.replace("_", " ")}</h2>'
+                        f'</div>'
+                        f'<div style="text-align: right;">'
+                        f'<span class="badge" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">RISK: {assessment.risk_level.value}</span>'
+                        f'<div style="margin-top: 6px; font-size: 0.9rem; font-weight: 700; color: #38bdf8;">Confidence: {int(assessment.confidence * 100)}%</div>'
+                        f'</div>'
+                        f'</div>'
+                        f'<p style="margin: 8px 0 0 0; color: #e2e8f0; font-size: 0.95rem; line-height: 1.5;">{assessment.summary}</p>'
+                        f'{basis_html}'
+                        f'<div style="margin-top: 12px;">{engine_badge}</div>'
+                        f'</div>'
                     )
+                    st.markdown(card_html, unsafe_allow_html=True)
 
                     # Verified Fact-Check Banner (if ClaimReview debunks found)
                     verified_fcs = [e for e in response_data.evidence if e.evidence_type == "VERIFIED_FACT_CHECK"]
                     if verified_fcs:
+                        direct_matches = [e for e in verified_fcs if (e.metadata or {}).get("is_direct_match", True)]
+                        banner_title = "Direct Verified Fact-Check Debunk Found" if direct_matches else "Related Fact-Check Topic Context"
+                        banner_border = "#ef4444" if direct_matches else "#0ea5e9"
+                        banner_bg = "rgba(239, 68, 68, 0.12)" if direct_matches else "rgba(14, 165, 233, 0.12)"
+                        banner_icon = "🚨" if direct_matches else "🌐"
+
                         st.markdown(
-                            """
-                            <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid #0ea5e9; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+                            f"""
+                            <div style="background: {banner_bg}; border: 1px solid {banner_border}; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 1.25rem;">🌐</span>
-                                    <strong style="color: #38bdf8; font-size: 1.05rem;">Verified Fact-Check Publisher Records Found (Google Fact Check Tools)</strong>
+                                    <span style="font-size: 1.25rem;">{banner_icon}</span>
+                                    <strong style="color: #f8fafc; font-size: 1.05rem;">{banner_title} (Google Fact Check Tools)</strong>
                                 </div>
                                 <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0 0 12px 0;">
-                                    This claim was cross-referenced against verified independent news publishers indexed via the ClaimReview database:
+                                    {'This input claim directly corresponds to a verified debunk in ClaimReview archives:' if direct_matches else 'Independent fact-checkers investigated the following related rumors on this general topic (note: distinct from your input claim):'}
                                 </p>
                             """,
                             unsafe_allow_html=True,
@@ -420,21 +435,29 @@ with col_results:
                             rating = meta.get("rating", "Unrated")
                             url = meta.get("url", "")
                             claim = meta.get("claim", "")
+                            is_direct = meta.get("is_direct_match", True)
                             date_val = meta.get("review_date", "")
                             date_str = f" &bull; <span style='color: #64748b;'>{date_val[:10]}</span>" if date_val else ""
-                            link_markup = f'<a href="{url}" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600; font-size: 0.85rem;">Read Verified Debunk Article ↗</a>' if url else ''
+                            link_markup = f'<a href="{url}" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600; font-size: 0.85rem;">Read Verified Source Article ↗</a>' if url else ''
                             
+                            badge_bg = "rgba(239, 68, 68, 0.2)" if is_direct else "rgba(56, 189, 248, 0.15)"
+                            badge_color = "#f87171" if is_direct else "#38bdf8"
+                            badge_border = "#ef4444" if is_direct else "#0284c7"
+                            badge_label = f"DIRECT MATCH &bull; RATING: {rating}" if is_direct else f"RELATED TOPIC &bull; RATING: {rating}"
+                            note_markup = "" if is_direct else '<div style="color: #94a3b8; font-size: 0.78rem; font-style: italic; margin-top: 4px;">ℹ️ Fact-checker evaluated a different rumor on this general topic, not your specific statement.</div>'
+
                             st.markdown(
                                 f"""
-                                <div style="background: rgba(15, 23, 42, 0.65); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                                <div style="background: rgba(15, 23, 42, 0.65); border-left: 4px solid {'#ef4444' if is_direct else '#38bdf8'}; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <strong style="color: #f8fafc; font-size: 0.95rem;">{pub}{date_str}</strong>
-                                        <span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 0.78rem;">
-                                            RATING: {rating}
+                                        <span style="background: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border}; border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 0.78rem;">
+                                            {badge_label}
                                         </span>
                                     </div>
-                                    <div style="color: #94a3b8; font-size: 0.85rem; margin: 6px 0;">Claim: &ldquo;{claim}&rdquo;</div>
+                                    <div style="color: #cbd5e1; font-size: 0.85rem; margin: 6px 0;">Claim Reviewed: &ldquo;{claim}&rdquo;</div>
                                     <div>{link_markup}</div>
+                                    {note_markup}
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
@@ -448,8 +471,8 @@ with col_results:
                                 st.markdown(f"- {c}")
 
                     # Tabs for detailed inspection
-                    tab_findings, tab_evidence, tab_explanation, tab_limitations, tab_json = st.tabs(
-                        ["🧩 Findings", "🔬 Evidence", "💡 Rationale", "⚠️ Limitations", "🔌 JSON"]
+                    tab_findings, tab_evidence, tab_visualizer, tab_explanation, tab_limitations, tab_json = st.tabs(
+                        ["🧩 Findings", "🔬 Evidence", "🖼️ Forensic Visualizer", "💡 Rationale", "⚠️ Limitations", "🔌 JSON"]
                     )
 
                     with tab_findings:
@@ -509,6 +532,47 @@ with col_results:
                                         st.caption(f"Evidence Metadata: {json.dumps(ev.metadata)}")
                         else:
                             st.info("No concrete evidentiary anomalies extracted for this input.")
+
+                    with tab_visualizer:
+                        st.markdown("#### 🔬 Multi-Modal Forensic Visualizer (MVNN & DIDAN Insights)")
+                        if active_media_bytes and "image" in active_media_type:
+                            try:
+                                orig = Image.open(io.BytesIO(active_media_bytes)).convert("RGB")
+                                buf_ela = io.BytesIO()
+                                orig.save(buf_ela, format="JPEG", quality=90)
+                                buf_ela.seek(0)
+                                recomp = Image.open(buf_ela).convert("RGB")
+                                diff = np.abs(np.asarray(orig, dtype=np.int16) - np.asarray(recomp, dtype=np.int16))
+                                scale_diff = np.clip(diff * 12, 0, 255).astype(np.uint8)
+                                ela_img = Image.fromarray(scale_diff)
+
+                                col_orig, col_ela = st.columns(2)
+                                with col_orig:
+                                    st.markdown("##### 📷 Original Uploaded Media")
+                                    st.image(orig, use_container_width=True)
+                                with col_ela:
+                                    st.markdown("##### 🔬 Error Level Analysis (ELA Heatmap)")
+                                    st.image(ela_img, use_container_width=True)
+                                    st.caption("Amplified pixel compression residuals (MVNN Pixel Domain). Spliced or in-painted regions stand out as high-intensity error clusters.")
+                            except Exception as ex:
+                                st.warning(f"Could not render ELA visualization: {ex}")
+                        else:
+                            st.info("Upload or select an image to inspect visual domain Error Level Analysis (ELA).")
+
+                        # Forensics Telemetry Cards
+                        syn_img_metrics = (response_data.findings.get("synthetic_image") or {}).metrics or {}
+                        syn_txt_metrics = (response_data.findings.get("synthetic_text") or {}).metrics or {}
+                        consist_metrics = (response_data.findings.get("consistency") or {}).metrics or {}
+
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1:
+                            st.metric("2D FFT High-Freq Ratio", syn_img_metrics.get("high_frequency_ratio", "N/A"))
+                        with c2:
+                            st.metric("ELA Max Error", syn_img_metrics.get("ela_max_error", "N/A"))
+                        with c3:
+                            st.metric("Text Emotional Arousal", syn_txt_metrics.get("emotional_arousal_score", "N/A"))
+                        with c4:
+                            st.metric("DIDAN Discrepancy", consist_metrics.get("didan_discrepancy_score", "N/A"))
 
                     with tab_explanation:
                         st.markdown(f"#### {response_data.explanation.headline}")

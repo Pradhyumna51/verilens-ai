@@ -22,7 +22,7 @@ from verilens.detectors.base import DetectorInput
 from verilens.detectors.deepfake import (
     DeepfakeDetector,
     PretrainedDeepfakeClassifier,
-    CalibratedFaceArtifactClassifier,
+    StatisticalFaceArtifactClassifier,
     extract_bounded_video_frames,
 )
 from verilens.schemas.response import DetectorStatus, EvidenceSeverity
@@ -123,7 +123,7 @@ class TestBoundedVideoFrameExtraction:
 class TestRealModelInference:
     """
     SECTION 2: REAL-MODEL INFERENCE (No mocks).
-    Validates execution of OpenCV face segmentation + CalibratedFaceArtifactClassifier.
+    Validates execution of OpenCV face segmentation + StatisticalFaceArtifactClassifier.
     """
 
     def test_real_model_inference_on_portrait_image(self):

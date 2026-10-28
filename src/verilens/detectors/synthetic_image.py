@@ -39,12 +39,12 @@ class PretrainedImageClassifier(ABC):
         pass
 
 
-class CalibratedFeatureClassifier(PretrainedImageClassifier):
+class StatisticalHeuristicClassifier(PretrainedImageClassifier):
     """
-    Calibrated lightweight pretrained vision classifier.
+    Statistical heuristic vision classifier (NOT pretrained on labeled data).
     Evaluates spectral energy distribution, residual entropy, and Laplacian variance
-    against benchmark parameters calibrated on synthetic diffusion and organic camera distributions.
-    Runs real inference without external network downloads.
+    using hand-tuned logistic weights. Scores are approximate indicators, not
+    validated classifier outputs.
     """
 
     def __init__(self):
@@ -80,8 +80,8 @@ class CalibratedFeatureClassifier(PretrainedImageClassifier):
         logit = float(np.dot(self.weights, features) + self.bias)
         prob_synthetic = 1.0 / (1.0 + np.exp(-logit))
 
-        # Model confidence: higher when distance from decision boundary (0.5) is large
-        confidence = float(np.clip(2.0 * abs(prob_synthetic - 0.5) * 0.4 + 0.6, 0.55, 0.95))
+        # Heuristic confidence: lower range reflects unvalidated nature
+        confidence = float(np.clip(2.0 * abs(prob_synthetic - 0.5) * 0.25 + 0.40, 0.35, 0.65))
         return float(prob_synthetic), confidence
 
 
@@ -115,7 +115,7 @@ class SyntheticImageDetector(BaseDetector):
                 self._pretrained_model = self._custom_classifier
             elif self._use_default_classifier:
                 try:
-                    self._pretrained_model = CalibratedFeatureClassifier()
+                    self._pretrained_model = StatisticalHeuristicClassifier()
                 except Exception as exc:
                     logger.warning(f"Failed to instantiate default pretrained classifier: {exc}")
                     self._pretrained_model = None
@@ -123,6 +123,68 @@ class SyntheticImageDetector(BaseDetector):
             else:
                 self._pretrained_model = None
         return self._pretrained_model
+
+    @staticmethod
+    def _compute_error_level_analysis(image: Image.Image) -> Dict[str, float]:
+        """
+        Computes Error Level Analysis (ELA) by recompressing the image as JPEG at quality 90.
+        Measures the absolute pixel residual difference between the original and recompressed image.
+        In-painted, spliced, or synthetic image regions exhibit higher or irregular compression error rates.
+        """
+        try:
+            rgb_image = image.convert("RGB")
+            buf = io.BytesIO()
+            rgb_image.save(buf, format="JPEG", quality=90)
+            buf.seek(0)
+            recompressed = Image.open(buf).convert("RGB")
+
+            orig_arr = np.asarray(rgb_image, dtype=np.float32)
+            recomp_arr = np.asarray(recompressed, dtype=np.float32)
+
+            diff = np.abs(orig_arr - recomp_arr)
+            mean_diff = float(np.mean(diff))
+            max_diff = float(np.max(diff))
+            return {
+                "ela_mean_error": round(mean_diff, 2),
+                "ela_max_error": round(max_diff, 2),
+            }
+        except Exception as e:
+            logger.debug(f"ELA calculation skipped or failed: {e}")
+            return {"ela_mean_error": 0.0, "ela_max_error": 0.0}
+
+    @staticmethod
+    def _compute_patch_noise_variance(img_arr: np.ndarray, grid_size: int = 8) -> Dict[str, float]:
+        """
+        Evaluates spatial noise distribution uniformity across non-overlapping image patches (MVNN pixel domain).
+        Pristine photographic images display consistent sensor noise across patches, whereas composite or diffusion
+        splicing introduces sharp variations in local noise energy (high coefficient of variation).
+        """
+        try:
+            h, w = img_arr.shape
+            patch_h, patch_w = max(8, h // grid_size), max(8, w // grid_size)
+            laplacian_kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float32)
+
+            patch_vars = []
+            for y in range(0, h - patch_h + 1, patch_h):
+                for x in range(0, w - patch_w + 1, patch_w):
+                    patch = img_arr[y : y + patch_h, x : x + patch_w]
+                    if patch.shape[0] >= 4 and patch.shape[1] >= 4:
+                        lap = scipy.signal.convolve2d(patch, laplacian_kernel, mode="valid")
+                        p_var = float(np.var(lap))
+                        patch_vars.append(p_var)
+
+            if len(patch_vars) >= 4:
+                mean_v = float(np.mean(patch_vars))
+                std_v = float(np.std(patch_vars))
+                dispersion = std_v / (mean_v + 1e-5)
+                return {
+                    "patch_noise_dispersion": round(dispersion, 3),
+                    "patch_noise_mean": round(mean_v, 2),
+                }
+            return {"patch_noise_dispersion": 0.0, "patch_noise_mean": 0.0}
+        except Exception as e:
+            logger.debug(f"Patch noise variance calculation skipped: {e}")
+            return {"patch_noise_dispersion": 0.0, "patch_noise_mean": 0.0}
 
     def _execute(self, input_data: DetectorInput) -> Tuple[DetectorFinding, List[EvidenceItem]]:
         if not input_data.media_bytes:
@@ -216,12 +278,49 @@ class SyntheticImageDetector(BaseDetector):
         grid_artifact_detected = (peak_z_score > 4.2)
 
         evidence: List[EvidenceItem] = []
+
+        # Pixel-domain forensics (MVNN dual-domain visual analysis)
+        ela_metrics = self._compute_error_level_analysis(image_raw)
+        noise_metrics = self._compute_patch_noise_variance(img_arr)
+
         metrics: Dict[str, Any] = {
             "high_frequency_ratio": round(high_freq_ratio, 3),
             "laplacian_variance": round(laplacian_var, 2),
             "frequency_peak_z_score": round(peak_z_score, 2),
             "resolution": f"{width}x{height}",
         }
+        metrics.update(ela_metrics)
+        metrics.update(noise_metrics)
+
+        # Flag pixel-domain inconsistency if ELA or patch noise dispersion is unusually elevated
+        if ela_metrics["ela_max_error"] > 65.0 and ela_metrics["ela_mean_error"] > 7.0:
+            evidence.append(
+                EvidenceItem(
+                    id="ev_ela_anomaly",
+                    detector_id=self.detector_id,
+                    evidence_type="PIXEL_DOMAIN_INCONSISTENCY",
+                    description=(
+                        f"Error Level Analysis (ELA) reveals localized compression residual anomalies "
+                        f"(max error: {ela_metrics['ela_max_error']:.1f}, mean: {ela_metrics['ela_mean_error']:.1f})."
+                    ),
+                    severity=EvidenceSeverity.MEDIUM,
+                    metadata=ela_metrics,
+                )
+            )
+        elif noise_metrics["patch_noise_dispersion"] > 2.5:
+            evidence.append(
+                EvidenceItem(
+                    id="ev_noise_dispersion",
+                    detector_id=self.detector_id,
+                    evidence_type="NOISE_INCONSISTENCY",
+                    description=(
+                        f"Local patch noise variance exhibits sharp spatial discontinuity across image tiles "
+                        f"(dispersion CV: {noise_metrics['patch_noise_dispersion']:.2f})."
+                    ),
+                    severity=EvidenceSeverity.MEDIUM,
+                    metadata=noise_metrics,
+                )
+            )
 
         # Run pretrained classifier if available
         model_prob: Optional[float] = None

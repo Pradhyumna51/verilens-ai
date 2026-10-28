@@ -16,7 +16,7 @@ from verilens.detectors.base import DetectorInput
 from verilens.detectors.synthetic_text import (
     SyntheticTextDetector,
     PretrainedTextClassifier,
-    CalibratedTextFeatureClassifier,
+    StatisticalTextHeuristicClassifier,
 )
 from verilens.schemas.response import DetectorStatus, EvidenceSeverity
 

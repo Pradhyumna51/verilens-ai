@@ -54,6 +54,30 @@ class OCRDetector(BaseDetector):
                 self._reader = None
         return self._reader
 
+    def _extract_with_winocr(self, image: Image.Image) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
+        """Extracts text using Windows native OCR engine (Windows.Media.Ocr via winocr)."""
+        try:
+            import winocr
+            import asyncio
+            import concurrent.futures
+
+            def _run():
+                return asyncio.run(winocr.recognize_pil(image, 'en'))
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                res = ex.submit(_run).result(timeout=4.0)
+
+            if res and hasattr(res, 'text') and res.text:
+                extracted = res.text.strip()
+                boxes = []
+                if hasattr(res, 'lines'):
+                    for line in res.lines:
+                        boxes.append({"text": line.text})
+                return extracted, boxes
+        except Exception as exc:
+            logger.debug(f"winocr extraction skipped/failed: {exc}")
+        return None
+
     def _execute(self, input_data: DetectorInput) -> Tuple[DetectorFinding, List[EvidenceItem]]:
         if not input_data.media_bytes:
             return DetectorFinding(
@@ -92,37 +116,43 @@ class OCRDetector(BaseDetector):
                 metrics={"width": image.width, "height": image.height},
             ), []
 
-        reader = self._get_lazy_reader()
         extracted_text = ""
         bounding_boxes: List[Dict[str, Any]] = []
-        model_backend = "easyocr"
+        model_backend = "none"
+        confidence = 0.70
 
-        if reader:
-            try:
-                results = reader.readtext(img_arr)
-                text_segments = []
-                for bbox, text_detected, prob in results:
-                    if prob >= 0.25:
-                        text_segments.append(text_detected)
-                        # Normalize bbox coordinates for JSON serialization
-                        bbox_serializable = [[int(pt[0]), int(pt[1])] for pt in bbox] if isinstance(bbox, (list, np.ndarray)) else []
-                        bounding_boxes.append({
-                            "text": text_detected,
-                            "confidence": round(float(prob), 3),
-                            "bbox": bbox_serializable,
-                        })
-                extracted_text = " ".join(text_segments).strip()
-            except Exception as e:
-                logger.warning(f"EasyOCR read failed: {e}. Falling back to byte text heuristic.")
-                extracted_text = self._detect_text_heuristic(input_data.media_bytes)
-                model_backend = "byte_heuristic"
+        # 1. Primary: Windows Native OCR (offline, zero-latency, highly accurate)
+        winocr_result = self._extract_with_winocr(image)
+        if winocr_result and winocr_result[0]:
+            extracted_text, bounding_boxes = winocr_result
+            model_backend = "winocr_native"
+            confidence = 0.94
         else:
-            extracted_text = self._detect_text_heuristic(input_data.media_bytes)
-            model_backend = "byte_heuristic"
+            # 2. Secondary: EasyOCR (if available)
+            reader = self._get_lazy_reader()
+            if reader:
+                try:
+                    results = reader.readtext(img_arr)
+                    text_segments = []
+                    for bbox, text_detected, prob in results:
+                        if prob >= 0.25:
+                            text_segments.append(text_detected)
+                            bbox_serializable = [[int(pt[0]), int(pt[1])] for pt in bbox] if isinstance(bbox, (list, np.ndarray)) else []
+                            bounding_boxes.append({
+                                "text": text_detected,
+                                "confidence": round(float(prob), 3),
+                                "bbox": bbox_serializable,
+                            })
+                    extracted_text = " ".join(text_segments).strip()
+                    if extracted_text:
+                        model_backend = "easyocr"
+                        confidence = 0.88
+                except Exception as e:
+                    logger.warning(f"EasyOCR read failed: {e}")
+                    extracted_text = ""
 
         evidence: List[EvidenceItem] = []
         manipulation_score = 0.05
-        confidence = 0.88 if model_backend == "easyocr" else 0.70
 
         metrics: Dict[str, Any] = {
             "extracted_text": extracted_text,
@@ -207,17 +237,5 @@ class OCRDetector(BaseDetector):
         ), evidence
 
     def _detect_text_heuristic(self, raw_bytes: bytes) -> str:
-        """Inspects raw byte buffer for plain-text strings when EasyOCR is offline."""
-        try:
-            ascii_strings = re.findall(b"[A-Za-z0-9 ,.!?'-]{6,}", raw_bytes)
-            filtered = []
-            for s in ascii_strings:
-                decoded = s.decode("latin1", errors="ignore").strip()
-                if not any(header in decoded for header in ["Photoshop", "ICC_PROFILE", "Exif", "JFIF", "Adobe"]):
-                    if len(decoded.split()) >= 2:
-                        filtered.append(decoded)
-            if filtered:
-                return " ".join(filtered[:3])
-        except Exception:
-            pass
+        """Safe fallback placeholder when no OCR backend is active."""
         return ""

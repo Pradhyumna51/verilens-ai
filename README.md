@@ -82,7 +82,7 @@ cp .env.example .env
 ```bash
 python -m pytest -v
 ```
-*(76 comprehensive automated unit and integration tests passing at 100%).*
+*(83 comprehensive automated unit and integration tests passing at 100%).*
 
 ### 4. 1-Click Launch (Windows)
 Double-click `start.bat` or run:

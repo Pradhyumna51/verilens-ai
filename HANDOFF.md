@@ -36,8 +36,16 @@ The core architecture, API gateway, pipeline orchestrator, detector registry, St
    - [`src/verilens/api/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/api/app.py): Exposes `GET /health` and `POST /analyze` with multipart upload limits (25MB media, 100k char text), MIME type validation, and CORS.
 7. **Interactive Streamlit UI**:
    - [`ui/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/ui/app.py): Dark-tech dashboard featuring 6 judge-ready evaluation presets, verdict glow cards, verified fact-check match callouts, findings breakdown, evidence inspector, and raw JSON export.
-8. **Automated Test Suite (76 Passing Tests)**:
-   - 76 tests covering all detectors, reasoner, fact-checker, OCR, upload limits, error handling, and operational boundaries.
+8. **Multi-Modal Academic Research Enhancements (ICTMCG/fake-news-detection)**:
+   - **MVNN Dual-Domain Visual Forensics**: Integrated Error Level Analysis (ELA) and local patch noise dispersion into [`SyntheticImageDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/synthetic_image.py) to catch pixel-domain residual discontinuities alongside 2D FFT spectral frequencies.
+   - **DIDAN Fine-Grained Entity Contradiction Defense**: Added environmental, setting, weather, and crowd density discrepancy matrix into [`ConsistencyDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/consistency.py) with lightweight CLIP hook (`openai/clip-vit-base-patch32`).
+   - **Dual Emotion & Sensationalist Style Forensics**: Added publisher emotional arousal, sensationalist lexicon, exclamation frequency, and uppercase ratio to [`SyntheticTextDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/synthetic_text.py).
+   - **att-RNN & MVAE Dynamic Quality-Weighted Attention Fusion**: Updated [`AnalysisPipeline`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/orchestrator.py) to dynamically scale detector weights by modality input quality.
+   - **Forensic Visualizer Tab**: Added interactive ELA compression heatmap rendering and multi-modal metric cards into [`ui/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/ui/app.py).
+10. **Web Knowledge & Real-Time Reference Grounding**:
+    - [`WebKnowledgeVerifier`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/web_knowledge.py): Cross-references real-world claims against Wikipedia REST API and DuckDuckGo Instant Answers. Detects life/death contradictions (e.g. false alive claims for deceased individuals, death hoaxes), corroborates historical dates, and populates authoritative `basis_sources` with direct reference links.
+11. **Automated Test Suite (89 Passing Tests)**:
+    - 89 comprehensive automated unit and integration tests passing at 100% across all detectors, reasoner, fact-checker, OCR, web knowledge verification, and advanced multimodal research capabilities.
 
 ---
 
@@ -47,6 +55,8 @@ The core architecture, API gateway, pipeline orchestrator, detector registry, St
 - **Stable Schema Models**: [`src/verilens/schemas/response.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/schemas/response.py)
 - **Detector Base & Input**: [`src/verilens/detectors/base.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/base.py)
 - **Detector Registry**: [`src/verilens/detectors/registry.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/registry.py)
+- **Fact-Checker (ClaimReview)**: [`src/verilens/pipeline/fact_check.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/fact_check.py)
+- **Web Knowledge Verifier**: [`src/verilens/pipeline/web_knowledge.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/web_knowledge.py)
 - **Pipeline Orchestrator**: [`src/verilens/pipeline/orchestrator.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/orchestrator.py)
 - **FastAPI Endpoints**: [`src/verilens/api/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/api/app.py)
 - **Streamlit Application**: [`ui/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/ui/app.py)
