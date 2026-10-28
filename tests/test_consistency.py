@@ -114,84 +114,53 @@ class TestConsistencyDetector:
         assert "does NOT prove" in disclaimer or "not real-world" in disclaimer
 
     def test_mocked_clip_high_similarity(self, detector):
-        # Mock CLIP model and processor to simulate high semantic similarity
+        from unittest.mock import patch
         mock_model = MagicMock()
         mock_processor = MagicMock()
-
-        # Mock PyTorch tensor behavior
-        class MockTensor:
-            def norm(self, dim=-1, keepdim=True):
-                return self
-            def __truediv__(self, other):
-                return self
-            def t(self):
-                return self
-
-        import torch
-        mock_outputs = MagicMock()
-        mock_outputs.image_embeds = MockTensor()
-        mock_outputs.text_embeds = MockTensor()
-        mock_model.return_value = mock_outputs
-
-        # Patch torch matmul
-        original_matmul = torch.matmul
-        torch.matmul = lambda a, b: torch.tensor([[0.85]])
-
+        mock_torch = MagicMock()
+        mock_torch.no_grad.return_value.__enter__ = MagicMock()
+        mock_torch.no_grad.return_value.__exit__ = MagicMock()
+        mock_item = MagicMock()
+        mock_item.item.return_value = 0.85
+        mock_torch.matmul.return_value = [[mock_item]]
         detector._clip_model = mock_model
         detector._clip_processor = mock_processor
         detector._clip_attempted = True
-
-        try:
+        with patch.dict(sys.modules, {"torch": mock_torch}):
             img = make_test_image()
             inp = DetectorInput(
                 text="A blue coastal seascape with ocean waves washing onto the shore.",
                 media_bytes=img,
-                media_content_type="image/png"
+                media_content_type="image/png",
             )
             finding, evidence = detector.run(inp)
             assert finding.status == DetectorStatus.SUCCESS
             assert finding.metrics["clip_backend"] == "pretrained_clip"
             ev_types = [e.evidence_type for e in evidence]
             assert "CLIP_SEMANTIC_ALIGNMENT" in ev_types
-        finally:
-            torch.matmul = original_matmul
 
     def test_mocked_clip_low_similarity_divergence(self, detector):
+        from unittest.mock import patch
         mock_model = MagicMock()
         mock_processor = MagicMock()
-
-        class MockTensor:
-            def norm(self, dim=-1, keepdim=True):
-                return self
-            def __truediv__(self, other):
-                return self
-            def t(self):
-                return self
-
-        import torch
-        mock_outputs = MagicMock()
-        mock_outputs.image_embeds = MockTensor()
-        mock_outputs.text_embeds = MockTensor()
-        mock_model.return_value = mock_outputs
-
-        original_matmul = torch.matmul
-        torch.matmul = lambda a, b: torch.tensor([[-0.10]])
-
+        mock_torch = MagicMock()
+        mock_torch.no_grad.return_value.__enter__ = MagicMock()
+        mock_torch.no_grad.return_value.__exit__ = MagicMock()
+        mock_item = MagicMock()
+        mock_item.item.return_value = -0.10
+        mock_torch.matmul.return_value = [[mock_item]]
         detector._clip_model = mock_model
         detector._clip_processor = mock_processor
         detector._clip_attempted = True
-
-        try:
+        with patch.dict(sys.modules, {"torch": mock_torch}):
             img = make_test_image()
             inp = DetectorInput(
                 text="An indoor conference room with a presentation whiteboard and office chairs.",
                 media_bytes=img,
-                media_content_type="image/png"
+                media_content_type="image/png",
             )
             finding, evidence = detector.run(inp)
             assert finding.status == DetectorStatus.SUCCESS
             ev_types = [e.evidence_type for e in evidence]
             assert "CLIP_SEMANTIC_DIVERGENCE" in ev_types
             assert finding.manipulation_score > 0.40
-        finally:
-            torch.matmul = original_matmul

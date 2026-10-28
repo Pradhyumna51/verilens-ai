@@ -9,6 +9,7 @@ from verilens.detectors.media_reuse import MediaReuseDetector
 from verilens.detectors.synthetic_image import SyntheticImageDetector
 from verilens.detectors.synthetic_text import SyntheticTextDetector
 from verilens.detectors.deepfake import DeepfakeDetector
+from verilens.detectors.ocr import OCRDetector
 from verilens.schemas.response import DetectorMeta
 
 class DetectorRegistry:
@@ -24,6 +25,7 @@ class DetectorRegistry:
             SyntheticImageDetector,
             SyntheticTextDetector,
             DeepfakeDetector,
+            OCRDetector,
         ]:
             instance = detector_cls()
             self._detectors[instance.detector_id] = instance
