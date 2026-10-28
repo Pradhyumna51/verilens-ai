@@ -439,6 +439,7 @@ class DeepfakeDetector(BaseDetector):
         # Threshold validation: Never label a media file AI-generated or manipulated solely because
         # a model score exceeds an unvalidated threshold.
         manipulation_score = 0.15
+        confidence = 0.74
 
         # Check for selective seam feathering vs global camera blur
         seam_blur_detected = False
@@ -493,6 +494,38 @@ class DeepfakeDetector(BaseDetector):
                 )
             )
 
+        # Inter-frame structural warping check across sampled video frames
+        morphological_warping = 0.0
+        if is_video and len(frames) >= 2:
+            warping_diffs = []
+            for i in range(1, len(frames)):
+                if cv2 is not None:
+                    f_curr = cv2.resize(frames[i], (128, 128)).astype(float)
+                    f_prev = cv2.resize(frames[i - 1], (128, 128)).astype(float)
+                else:
+                    f_curr = frames[i].astype(float)
+                    f_prev = frames[i - 1].astype(float)
+                warping_diffs.append(float(np.mean(np.abs(f_curr - f_prev))))
+            morphological_warping = float(np.mean(warping_diffs)) if warping_diffs else 0.0
+            metrics["morphological_warping"] = round(morphological_warping, 2)
+
+            if morphological_warping > 26.0:
+                manipulation_score = max(manipulation_score, 0.78)
+                confidence = max(confidence, 0.82)
+                evidence.append(
+                    EvidenceItem(
+                        id="ev_temporal_morphological_warping",
+                        detector_id=self.detector_id,
+                        evidence_type="TEMPORAL_INCONSISTENCY",
+                        description=(
+                            f"Excessive inter-frame structural warping ({morphological_warping:.1f}) indicates "
+                            f"unstable generative AI video rendering and melting facial textures."
+                        ),
+                        severity=EvidenceSeverity.HIGH,
+                        metadata={"morphological_warping": round(morphological_warping, 2)},
+                    )
+                )
+
         # Harmonize with model score using threshold validation
         if avg_model_prob is not None:
             # Check for ambiguous interval (0.40 <= prob <= 0.65)
@@ -522,17 +555,19 @@ class DeepfakeDetector(BaseDetector):
                     metrics=metrics,
                 ), evidence
 
+            has_dynamic_anomaly = (temporal_jitter > 0.35) or (morphological_warping > 26.0) or seam_blur_detected
             if avg_model_prob > 0.70 and seam_blur_detected:
                 manipulation_score = min(0.95, round(0.5 * avg_model_prob + 0.5 * manipulation_score, 2))
                 confidence = 0.85
-            elif avg_model_prob < 0.25 and not seam_blur_detected:
+            elif avg_model_prob < 0.25 and not has_dynamic_anomaly:
                 manipulation_score = round(min(manipulation_score, avg_model_prob), 2)
                 confidence = 0.80
+            elif has_dynamic_anomaly:
+                manipulation_score = max(manipulation_score, round(0.3 * avg_model_prob + 0.7 * manipulation_score, 2))
+                confidence = max(confidence, 0.82)
             else:
                 manipulation_score = round(0.5 * avg_model_prob + 0.5 * manipulation_score, 2)
                 confidence = 0.72
-        else:
-            confidence = 0.74
 
         summary = (
             f"Evaluated portrait candidate regions ({faces_detected} face regions in {len(frames)} frame(s), "

@@ -414,11 +414,25 @@ class AnalysisPipeline:
         if direct_debunks:
             agg_confidence = max(agg_confidence, 0.88)
 
-        # Detector disagreement detection: if any two detectors differ by >0.40, cap confidence
+        # Disagreement detection across active evaluative channels:
+        # Passive baseline channels (e.g. OCR finding no text overlays <= 0.15, MediaReuse finding no local database duplicate <= 0.15)
+        # represent absence of auxiliary features, not contradictory evidence of authenticity.
+        active_conflict_scores = [
+            f.manipulation_score for f in scored_findings
+            if f.manipulation_score is not None and not (
+                (f.detector_id == "ocr_detector" and f.manipulation_score <= 0.15) or
+                (f.detector_id == "media_reuse" and f.manipulation_score <= 0.15)
+            )
+        ]
+
         has_conflict = False
-        if len(scores_list) >= 2:
-            score_range = max(scores_list) - min(scores_list)
-            if score_range > 0.40:
+        if len(active_conflict_scores) >= 2:
+            score_range = max(active_conflict_scores) - min(active_conflict_scores)
+            high_active = [s for s in active_conflict_scores if s >= 0.70]
+            low_active = [s for s in active_conflict_scores if s < 0.25]
+            # True conflict: one active channel flags high manipulation while another flags clear authenticity,
+            # without multiple corroborated high scores or a decisive anomaly (>= 0.85).
+            if high_active and low_active and len(high_active) < 2 and max(high_active) < 0.85 and score_range > 0.40:
                 has_conflict = True
                 agg_confidence = min(agg_confidence, 0.50)
                 primary_concerns.append(
@@ -426,7 +440,7 @@ class AnalysisPipeline:
                     f"Confidence capped — human review recommended."
                 )
                 basis_sources.append(
-                    f"Conflict Telemetry: Disagreement between channels (range {score_range:.2f}) reduces confidence."
+                    f"Conflict Telemetry: Disagreement between active channels (range {score_range:.2f}) reduces confidence."
                 )
 
         max_score = max(scores_list) if scores_list else 0.0
@@ -441,10 +455,12 @@ class AnalysisPipeline:
         else:
             verdict = Verdict.UNCERTAIN
 
-        # Strong Anomaly Rule: If any specialized detector flags severe tampering (>= 0.75),
-        # do not allow non-applicable negative channels to dilute it into UNCERTAIN.
-        if max_score >= 0.85:
-            verdict = Verdict.LIKELY_MANIPULATED if not has_conflict else Verdict.SUSPICIOUS
+        # Strong Anomaly Rule: If any specialized detector flags severe tampering (>= 0.85)
+        # or multiple active detectors flag tampering (>= 0.70):
+        anomalous_active = [f for f in scored_findings if (f.manipulation_score or 0) >= 0.70]
+        if max_score >= 0.85 or len(anomalous_active) >= 2:
+            verdict = Verdict.LIKELY_MANIPULATED
+            agg_confidence = max(agg_confidence, 0.85)
         elif max_score >= 0.75 and verdict == Verdict.UNCERTAIN:
             verdict = Verdict.SUSPICIOUS
 

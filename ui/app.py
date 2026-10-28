@@ -349,6 +349,7 @@ with col_results:
                     import importlib
                     import verilens.core.video
                     import verilens.detectors.synthetic_image
+                    import verilens.detectors.deepfake
                     import verilens.detectors.reuse
                     import verilens.detectors.ocr
                     import verilens.pipeline.reasoner
@@ -356,6 +357,7 @@ with col_results:
                     import verilens.pipeline.orchestrator
                     importlib.reload(verilens.core.video)
                     importlib.reload(verilens.detectors.synthetic_image)
+                    importlib.reload(verilens.detectors.deepfake)
                     importlib.reload(verilens.detectors.reuse)
                     importlib.reload(verilens.detectors.ocr)
                     importlib.reload(verilens.pipeline.reasoner)
