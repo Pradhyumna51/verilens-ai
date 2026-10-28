@@ -192,7 +192,7 @@ class DeepfakeDetector(BaseDetector):
         self._cascade: Optional[Any] = None
 
     def _get_cascade(self) -> Optional[Any]:
-        if cv2 is None:
+        if cv2 is None or not hasattr(cv2, "CascadeClassifier"):
             return None
         if self._cascade is None:
             try:
