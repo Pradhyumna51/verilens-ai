@@ -1,6 +1,6 @@
 """
 Pytest configuration for VeriLens AI test suite.
-Ensures src/ and detectors/ are available on sys.path for all tests.
+Ensures src/ is available on sys.path for all tests.
 """
 
 import sys

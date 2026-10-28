@@ -14,7 +14,11 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Dict, Any
 import numpy as np
 from PIL import Image
-import cv2
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 from verilens.detectors.base import BaseDetector, DetectorInput
 from verilens.schemas.response import (
@@ -37,6 +41,9 @@ def extract_bounded_video_frames(
     Safely extracts a bounded number of evenly spaced RGB frames from video bytes using OpenCV.
     Guarantees resource cleanup via temporary file and VideoCapture release.
     """
+    if cv2 is None:
+        raise RuntimeError("OpenCV ('opencv-python') is required for video frame extraction. Please install it.")
+
     temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     try:
         temp_file.write(video_bytes)
@@ -113,7 +120,14 @@ class CalibratedFaceArtifactClassifier(PretrainedDeepfakeClassifier):
         if h < 16 or w < 16:
             return 0.10, 0.50
 
-        gray = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        if cv2 is not None:
+            gray = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        else:
+            r = face_rgb[:, :, 0].astype(np.float32)
+            g = face_rgb[:, :, 1].astype(np.float32)
+            b = face_rgb[:, :, 2].astype(np.float32)
+            gray = 0.299 * r + 0.587 * g + 0.114 * b
+
         # Compute gradient
         gy, gx = np.gradient(gray)
         grad_mag = np.sqrt(gx ** 2 + gy ** 2)
@@ -135,9 +149,15 @@ class CalibratedFaceArtifactClassifier(PretrainedDeepfakeClassifier):
         discontinuity_feature = float(np.clip((mean_margin - 60.0) / 40.0, 0.0, 1.0))
 
         # Chroma divergence in YCrCb
-        ycrcb = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2YCrCb)
-        cr = ycrcb[:, :, 1].astype(np.float32)
-        cb = ycrcb[:, :, 2].astype(np.float32)
+        if cv2 is not None:
+            ycrcb = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2YCrCb)
+            cr = ycrcb[:, :, 1].astype(np.float32)
+            cb = ycrcb[:, :, 2].astype(np.float32)
+        else:
+            r = face_rgb[:, :, 0].astype(np.float32)
+            b = face_rgb[:, :, 2].astype(np.float32)
+            cr = (r - gray) * 0.7132 + 128.0
+            cb = (b - gray) * 0.5643 + 128.0
         center_cr = float(np.mean(cr[center_mask])) if np.any(center_mask) else 0.0
         margin_cr = float(np.mean(cr[margin_mask])) if np.any(margin_mask) else 0.0
         chroma_diff = float(np.clip(abs(center_cr - margin_cr) / 25.0, 0.0, 1.0))
@@ -170,9 +190,11 @@ class DeepfakeDetector(BaseDetector):
         self._pretrained_model: Optional[PretrainedDeepfakeClassifier] = classifier
         self._model_load_attempted: bool = False
         self._model_load_error: Optional[str] = None
-        self._cascade: Optional[cv2.CascadeClassifier] = None
+        self._cascade: Optional[Any] = None
 
-    def _get_cascade(self) -> Optional[cv2.CascadeClassifier]:
+    def _get_cascade(self) -> Optional[Any]:
+        if cv2 is None:
+            return None
         if self._cascade is None:
             try:
                 cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -207,6 +229,17 @@ class DeepfakeDetector(BaseDetector):
                 manipulation_score=None,
                 confidence=0.0,
                 summary="No visual media provided for deepfake evaluation.",
+            ), []
+
+        if input_data.has_video and cv2 is None:
+            return DetectorFinding(
+                detector_id=self.detector_id,
+                detector_name=self.detector_name,
+                status=DetectorStatus.ERROR,
+                manipulation_score=None,
+                confidence=0.0,
+                summary="OpenCV is required for video decoding but is not installed.",
+                error_message="OpenCV is required for video decoding but is not installed.",
             ), []
 
         # Check if pretrained model is required but unavailable
@@ -284,12 +317,16 @@ class DeepfakeDetector(BaseDetector):
 
         for frame in frames:
             h, w, _ = frame.shape
-            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             detected_rects = []
-            if cascade is not None:
-                detected_rects = cascade.detectMultiScale(
-                    gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
-                )
+            if cascade is not None and cv2 is not None:
+                try:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                    detected_rects = cascade.detectMultiScale(
+                        gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
+                    )
+                except Exception as exc:
+                    logger.warning(f"Face cascade detection failed: {exc}")
+                    detected_rects = []
 
             # Skin tone candidate segmentation fallback
             r = frame[:, :, 0].astype(int)
