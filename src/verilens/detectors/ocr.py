@@ -164,15 +164,19 @@ class OCRDetector(BaseDetector):
 
         if extracted_text:
             text_lower = extracted_text.lower()
-            # Detect sensational clickbait/meme overlay words
+            # Detect sensational clickbait/meme overlay words or all-caps sensationalism
             sensational_overlay = any(
                 k in text_lower
-                for k in ["breaking", "urgent", "censored", "exposed", "fake", "hoax", "alert", "secret", "they don't want you to know"]
-            )
+                for k in [
+                    "breaking", "urgent", "censored", "exposed", "fake", "hoax",
+                    "alert", "secret", "they don't want you to know", "apocalypse",
+                    "bans", "banned", "bombshell", "shocking", "viral"
+                ]
+            ) or bool(re.search(r'[A-Z\s]{8,}!+', extracted_text))
             metrics["has_sensational_overlay"] = sensational_overlay
 
             if sensational_overlay:
-                manipulation_score = 0.60
+                manipulation_score = 0.65
                 severity = EvidenceSeverity.MEDIUM
             else:
                 severity = EvidenceSeverity.LOW

@@ -412,6 +412,8 @@ class AnalysisPipeline:
                     f"Conflict Telemetry: Disagreement between channels (range {score_range:.2f}) reduces confidence."
                 )
 
+        max_score = max(scores_list) if scores_list else 0.0
+
         # Determine Verdict
         if agg_score >= 0.75:
             verdict = Verdict.LIKELY_MANIPULATED
@@ -422,17 +424,24 @@ class AnalysisPipeline:
         else:
             verdict = Verdict.UNCERTAIN
 
+        # Strong Anomaly Rule: If any specialized detector flags severe tampering (>= 0.75),
+        # do not allow non-applicable negative channels to dilute it into UNCERTAIN.
+        if max_score >= 0.85:
+            verdict = Verdict.LIKELY_MANIPULATED if not has_conflict else Verdict.SUSPICIOUS
+        elif max_score >= 0.75 and verdict == Verdict.UNCERTAIN:
+            verdict = Verdict.SUSPICIOUS
+
         # If detectors conflict, downgrade strong verdicts to SUSPICIOUS/UNCERTAIN
         if has_conflict and verdict == Verdict.LIKELY_MANIPULATED:
             verdict = Verdict.SUSPICIOUS
-        elif has_conflict and verdict == Verdict.LIKELY_REAL:
+        elif has_conflict and verdict == Verdict.LIKELY_REAL and max_score < 0.50:
             verdict = Verdict.UNCERTAIN
 
         # Determine Risk Level
-        if agg_score >= 0.85:
-            risk = RiskLevel.CRITICAL
-        elif agg_score >= 0.60:
-            risk = RiskLevel.HIGH
+        if agg_score >= 0.85 or max_score >= 0.85:
+            risk = RiskLevel.CRITICAL if agg_score >= 0.85 else RiskLevel.HIGH
+        elif agg_score >= 0.60 or max_score >= 0.75:
+            risk = RiskLevel.HIGH if agg_score >= 0.60 else RiskLevel.MEDIUM
         elif agg_score >= 0.30:
             risk = RiskLevel.MEDIUM
         else:
