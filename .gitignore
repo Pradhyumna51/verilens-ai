@@ -48,3 +48,6 @@ htmlcov/
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Graphify
+graphify-out/
