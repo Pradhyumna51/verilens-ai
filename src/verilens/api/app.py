@@ -59,6 +59,7 @@ async def analyze(
     text: Optional[str] = Form(None),
     media_file: Optional[UploadFile] = File(None),
     enabled_detectors: Optional[str] = Form(None),
+    api_key: Optional[str] = Form(None),
 ):
     """
     Multimodal misinformation analysis endpoint.
@@ -124,6 +125,8 @@ async def analyze(
                 ),
             )
 
+    active_api_key = api_key or request.headers.get("x-gemini-api-key") or request.headers.get("x-api-key")
+
     try:
         response = pipeline.run(
             text=text,
@@ -131,6 +134,7 @@ async def analyze(
             media_filename=media_filename,
             media_content_type=media_content_type,
             enabled_detectors=active_detectors,
+            api_key=active_api_key,
         )
         return response
     except Exception as exc:

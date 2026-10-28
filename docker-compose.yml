@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  verilens:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: verilens-ai
+    ports:
+      - "8000:8000"   # FastAPI Gateway & OpenAPI Docs
+      - "8501:8501"   # Streamlit Interactive Dashboard
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+    restart: unless-stopped

@@ -1,8 +1,22 @@
-"""
-Configuration settings for VeriLens AI.
-"""
+import os
+from pathlib import Path
+from typing import Set, Optional
 
-from typing import Set
+# Load .env file if present in workspace root
+_env_file = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+if _env_file.exists():
+    try:
+        with open(_env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k not in os.environ:
+                        os.environ[k] = v
+    except Exception:
+        pass
+
 
 class Settings:
     PROJECT_NAME: str = "VeriLens AI"
@@ -12,6 +26,14 @@ class Settings:
     # Upload limits
     MAX_MEDIA_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 Megabytes
     MAX_TEXT_CHARS: int = 100_000
+
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", None)
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_API_BASE: str = "https://generativelanguage.googleapis.com/v1beta/models"
+    
+    # Perceptual hash cache
+    ENABLE_REUSE_CACHE: bool = True
+    MAX_CACHE_ENTRIES: int = 500
     
     # Allowed MIME types
     ALLOWED_IMAGE_TYPES: Set[str] = {
@@ -40,6 +62,7 @@ class Settings:
         "synthetic_image",
         "synthetic_text",
         "deepfake",
+        "ocr_detector",
     ]
 
 settings = Settings()

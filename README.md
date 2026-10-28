@@ -68,24 +68,37 @@ Misinformation increasingly spreads across mixed modalities (e.g. caption-media 
 pip install -r requirements.txt
 ```
 
-### 2. Run the Smoke Test Suite
+### 2. Configure Environment (Optional Free AI Reasoning)
+Copy `.env.example` to `.env` to enable Google Gemini 2.0 Flash (100% Free tier on Google AI Studio):
 ```bash
-python -m pytest tests/test_smoke.py -v
+cp .env.example .env
+```
+*(If left empty, VeriLens AI runs in 100% offline local forensic ensemble mode).*
+
+### 3. Run the Test Suite
+```bash
+python -m pytest -v
 ```
 
-### 3. Launch the FastAPI Backend Service
-```bash
-python -m uvicorn verilens.api.app:app --host 127.0.0.1 --port 8000 --reload
+### 4. 1-Click Launch (Windows)
+Double-click `start.bat` or run:
+```powershell
+.\start.bat
 ```
-Interactive OpenAPI documentation will be accessible at:  
-👉 `http://127.0.0.1:8000/docs`
+*(To shut down both services: `.\stop.bat`).*
 
-### 4. Launch the Streamlit Evaluation Dashboard
+### 5. 1-Command Launch with Docker
 ```bash
-streamlit run ui/app.py
+docker compose up --build
 ```
-Dashboard will be accessible at:  
-👉 `http://localhost:8501`
+
+---
+
+## 🌐 Live Access Points
+- **Interactive Streamlit Dashboard**: `http://localhost:8501`
+- **FastAPI OpenAPI Swagger Documentation**: `http://localhost:8000/docs`
+- **Health Check Endpoint**: `GET http://localhost:8000/health`
+- **Multimodal Verification Endpoint**: `POST http://localhost:8000/analyze`
 
 ---
 
@@ -102,3 +115,5 @@ The Streamlit sidebar includes one-click presets covering key edge cases:
 ## 📄 API Contract & Documentation
 - **Implementation Plan**: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 - **API Schema Specification**: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+- **Handoff & Architecture Log**: [`HANDOFF.md`](HANDOFF.md)
+

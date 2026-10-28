@@ -175,6 +175,19 @@ with st.sidebar:
     api_url = st.text_input("FastAPI Base URL", value="http://127.0.0.1:8000")
 
     st.markdown("---")
+    st.markdown("### 🤖 Cognitive AI Reasoning")
+    gemini_key = st.text_input(
+        "Gemini API Key (Optional)",
+        value=settings.GEMINI_API_KEY or "",
+        type="password",
+        help="Free key from Google AI Studio (aistudio.google.com). When set, enables Gemini 2.0 Flash multimodal reasoning and explanation generation. When empty, runs fast local offline forensics.",
+    )
+    if gemini_key:
+        st.markdown('<span style="color: #34d399; font-size: 0.85rem; font-weight: 600;">✨ Gemini 2.0 Flash Active (Multimodal)</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600;">🛡️ Local Forensics Ensemble (Offline)</span>', unsafe_allow_html=True)
+
+    st.markdown("---")
     st.markdown("### 🎯 Quick Evaluation Presets")
     st.caption("One-click scenarios designed for hackathon judges:")
     
@@ -291,8 +304,10 @@ with col_results:
                         data = {
                             "text": input_text,
                             "enabled_detectors": ",".join(enabled_detector_ids),
+                            "api_key": gemini_key or "",
                         }
-                        res = requests.post(f"{api_url}/analyze", data=data, files=files, timeout=20)
+                        headers = {"x-gemini-api-key": gemini_key} if gemini_key else {}
+                        res = requests.post(f"{api_url}/analyze", data=data, files=files, headers=headers, timeout=25)
                         if res.status_code == 200:
                             response_data = AnalysisResponse(**res.json())
                         else:
@@ -307,12 +322,20 @@ with col_results:
                         media_filename=active_media_name,
                         media_content_type=active_media_type,
                         enabled_detectors=enabled_detector_ids,
+                        api_key=gemini_key or None,
                     )
 
                 if response_data:
                     assessment = response_data.overall_assessment
                     v_class = f"verdict-{assessment.verdict.value}"
                     
+                    ai_enhanced = any("Gemini" in a for a in response_data.limitations.model_assumptions) or any("gemini" in str(e.metadata) for e in response_data.evidence)
+                    engine_badge = (
+                        '<span style="display:inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">✨ Powered by Gemini 2.0 Flash Multimodal Forensics</span>'
+                        if ai_enhanced
+                        else '<span style="display:inline-block; background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid #64748b; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">🛡️ Powered by Local Forensic Ensemble</span>'
+                    )
+
                     # Verdict Card
                     st.markdown(
                         f"""
@@ -336,6 +359,9 @@ with col_results:
                             <p style="margin: 8px 0 0 0; color: #e2e8f0; font-size: 0.95rem; line-height: 1.5;">
                                 {assessment.summary}
                             </p>
+                            <div style="margin-top: 12px;">
+                                {engine_badge}
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,

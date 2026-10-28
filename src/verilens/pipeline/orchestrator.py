@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 
 from verilens.detectors.base import DetectorInput
 from verilens.detectors.registry import registry
+from verilens.pipeline.reasoner import reasoner, MultimodalReasoner
 from verilens.schemas.response import (
     DetectorStatus,
     Verdict,
@@ -28,8 +29,9 @@ from verilens.core.logger import get_logger
 logger = get_logger("Orchestrator")
 
 class AnalysisPipeline:
-    def __init__(self):
+    def __init__(self, custom_reasoner: Optional[MultimodalReasoner] = None):
         self.registry = registry
+        self.reasoner = custom_reasoner or reasoner
 
     def run(
         self,
@@ -39,6 +41,7 @@ class AnalysisPipeline:
         media_content_type: Optional[str] = None,
         enabled_detectors: Optional[List[str]] = None,
         request_id: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> AnalysisResponse:
         start_time = time.perf_counter()
         req_id = request_id or f"req_{uuid.uuid4().hex[:8]}"
@@ -85,6 +88,25 @@ class AnalysisPipeline:
         overall_assessment = self._fuse_assessment(findings)
         explanation = self._generate_explanation(findings, all_evidence, overall_assessment)
         limitations = self._derive_limitations(findings, untested_modalities)
+
+        # Multimodal AI Cognitive Reasoning Layer (if API key available)
+        if self.reasoner.is_available(override_key=api_key):
+            ai_result = self.reasoner.reason(
+                text=text,
+                media_bytes=media_bytes,
+                media_content_type=media_content_type,
+                local_findings=findings,
+                local_evidence=all_evidence,
+                api_key_override=api_key,
+            )
+            if ai_result:
+                ai_assessment, ai_explanation, extra_evidence = ai_result
+                overall_assessment = ai_assessment
+                explanation = ai_explanation
+                all_evidence.extend(extra_evidence)
+                limitations.model_assumptions.append(
+                    f"Multimodal reasoning enhanced via Google {self.reasoner.model}."
+                )
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
