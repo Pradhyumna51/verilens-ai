@@ -1,7 +1,7 @@
 # 🛡️ VeriLens AI
 
 > **Multimodal Misinformation Detection & Human-Understandable Explanation Engine**  
-> Built for Hacksploit 2026 (Problem Statement 2: Multi-Modal Misinformation Detection with Explanation Generation)
+> Enterprise-grade Multimodal Misinformation & Deepfake Forensic Intelligence Engine
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
@@ -15,7 +15,7 @@ Misinformation increasingly spreads across mixed modalities (e.g. caption-media 
 - **Strict Status Handling**: Every detector produces explicit `NOT_RUN`, `UNCERTAIN`, `ERROR`, or `SUCCESS` statuses.
 - **Stable JSON Response Contract**: Standardized schema across `overall_assessment`, `findings`, `evidence`, `explanation`, and `limitations`.
 - **Zero-Hallucination Transparency**: No detector claims model execution or quantitative certainty unless algorithmically validated.
-- **Dual Interface**: High-throughput FastAPI REST API gateway + judge-friendly interactive Streamlit dashboard with 1-click evaluation presets.
+- **Dual Interface**: High-throughput FastAPI REST API gateway + interactive Streamlit dashboard with 1-click evaluation presets.
 
 ---
 

@@ -551,7 +551,7 @@ class AnalysisPipeline:
         untested_modalities: List[str],
     ) -> Limitations:
         disclaimers = [
-            "VeriLens AI is a hackathon-grade decision support system intended to augment, not replace, human fact-checking.",
+            "VeriLens AI is an enterprise decision support system intended to augment, not replace, human fact-checking.",
             "Heuristic and statistical indicators are probabilistic and can be affected by aggressive compression or editing.",
         ]
 

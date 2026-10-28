@@ -1,7 +1,7 @@
 """
 VeriLens AI - Multimodal Misinformation & Forensic Verification Engine
 Crafted with Apple-tier Fluid Dynamics, High-End Visual Design & Doppelrand Architecture
-Hacksploit 2026
+Enterprise Production Edition
 """
 
 import io
@@ -21,6 +21,15 @@ from verilens.core.config import settings
 from verilens.detectors.registry import registry
 from verilens.pipeline.orchestrator import pipeline
 from verilens.schemas.response import AnalysisResponse, DetectorStatus, Verdict, RiskLevel
+
+# -----------------------------------------------------------------------------
+# HTML Rendering Helper (Guarantees zero markdown code block indentation parsing)
+# -----------------------------------------------------------------------------
+def render_html(raw_html: str) -> None:
+    """Renders HTML in Streamlit ensuring no leading indentation triggers markdown code blocks."""
+    cleaned = " ".join(line.strip() for line in raw_html.split("\n") if line.strip())
+    st.markdown(cleaned, unsafe_allow_html=True)
+
 
 # -----------------------------------------------------------------------------
 # Page Configuration
@@ -177,9 +186,9 @@ st.markdown(
     }
 
     .v-LIKELY_MANIPULATED {
-        background: radial-gradient(120% 120% at 10% 0%, rgba(244, 63, 94, 0.15) 0%, rgba(136, 19, 55, 0.06) 100%), rgba(22, 12, 18, 0.8);
-        border: 1px solid rgba(244, 63, 94, 0.3);
-        border-top: 1px solid rgba(251, 113, 133, 0.5);
+        background: radial-gradient(120% 120% at 10% 0%, rgba(244, 63, 94, 0.15) 0%, rgba(136, 19, 55, 0.06) 100%), rgba(22, 12, 18, 0.85);
+        border: 1px solid rgba(244, 63, 94, 0.35);
+        border-top: 1px solid rgba(251, 113, 133, 0.55);
     }
     .v-LIKELY_MANIPULATED .verdict-title {
         color: #fda4af;
@@ -187,9 +196,9 @@ st.markdown(
     }
 
     .v-SUSPICIOUS {
-        background: radial-gradient(120% 120% at 10% 0%, rgba(245, 158, 11, 0.15) 0%, rgba(146, 64, 14, 0.06) 100%), rgba(24, 18, 12, 0.8);
-        border: 1px solid rgba(245, 158, 11, 0.3);
-        border-top: 1px solid rgba(251, 191, 36, 0.5);
+        background: radial-gradient(120% 120% at 10% 0%, rgba(245, 158, 11, 0.15) 0%, rgba(146, 64, 14, 0.06) 100%), rgba(24, 18, 12, 0.85);
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        border-top: 1px solid rgba(251, 191, 36, 0.55);
     }
     .v-SUSPICIOUS .verdict-title {
         color: #fde68a;
@@ -197,9 +206,9 @@ st.markdown(
     }
 
     .v-LIKELY_REAL {
-        background: radial-gradient(120% 120% at 10% 0%, rgba(16, 185, 129, 0.15) 0%, rgba(6, 95, 70, 0.06) 100%), rgba(10, 22, 18, 0.8);
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        border-top: 1px solid rgba(52, 211, 153, 0.5);
+        background: radial-gradient(120% 120% at 10% 0%, rgba(16, 185, 129, 0.15) 0%, rgba(6, 95, 70, 0.06) 100%), rgba(10, 22, 18, 0.85);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        border-top: 1px solid rgba(52, 211, 153, 0.55);
     }
     .v-LIKELY_REAL .verdict-title {
         color: #a7f3d0;
@@ -207,9 +216,9 @@ st.markdown(
     }
 
     .v-UNCERTAIN {
-        background: radial-gradient(120% 120% at 10% 0%, rgba(139, 92, 246, 0.15) 0%, rgba(76, 29, 149, 0.06) 100%), rgba(18, 14, 28, 0.8);
-        border: 1px solid rgba(139, 92, 246, 0.3);
-        border-top: 1px solid rgba(196, 181, 253, 0.5);
+        background: radial-gradient(120% 120% at 10% 0%, rgba(139, 92, 246, 0.15) 0%, rgba(76, 29, 149, 0.06) 100%), rgba(18, 14, 28, 0.85);
+        border: 1px solid rgba(139, 92, 246, 0.35);
+        border-top: 1px solid rgba(196, 181, 253, 0.55);
     }
     .v-UNCERTAIN .verdict-title {
         color: #ddd6fe;
@@ -245,31 +254,31 @@ st.markdown(
         color: #38bdf8;
     }
 
-    /* Forensic Basis Tray */
+    /* Forensic Basis Tray (Clean Native Styling) */
     .basis-tray {
         margin-top: 18px;
-        padding: 16px 18px;
-        background: rgba(8, 12, 22, 0.7);
+        padding: 16px 20px;
+        background: rgba(8, 12, 22, 0.75);
         border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
     }
     .basis-heading {
-        font-size: 0.76rem;
+        font-size: 0.78rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.12em;
         color: #38bdf8;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         margin-bottom: 10px;
     }
     .basis-list {
         margin: 0;
         padding-left: 20px;
-        font-size: 0.85rem;
-        line-height: 1.55;
+        font-size: 0.88rem;
+        line-height: 1.6;
         color: #cbd5e1;
     }
     .basis-item {
@@ -469,7 +478,7 @@ def generate_sample_image(sample_type: str) -> bytes:
 # -----------------------------------------------------------------------------
 # Floating Apple-Tier Navigation Header
 # -----------------------------------------------------------------------------
-st.markdown(
+render_html(
     """
     <div class="apple-nav-header">
         <div>
@@ -480,7 +489,7 @@ st.markdown(
                 </span>
             </div>
             <p class="brand-subtitle">
-                Multimodal Misinformation Detection & Deepfake Forensic Analysis &bull; Hacksploit 2026
+                Multimodal Misinformation Detection & Autonomous Deepfake Forensic Analysis
             </p>
         </div>
         <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
@@ -491,8 +500,7 @@ st.markdown(
             <span style="font-family: var(--font-mono); font-size: 0.8rem; color: #64748b;">v1.0.0 Enterprise</span>
         </div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 # -----------------------------------------------------------------------------
@@ -503,7 +511,7 @@ gemini_key = settings.GEMINI_API_KEY or None
 fc_key = settings.FACT_CHECK_API_KEY or None
 
 with st.sidebar:
-    st.markdown(
+    render_html(
         """
         <div style="padding: 4px 0 16px 0;">
             <div class="eyebrow-pill">
@@ -511,8 +519,7 @@ with st.sidebar:
                 <span>INSPECTOR SETTINGS</span>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.markdown("##### ⚙️ Execution Runtime")
@@ -533,7 +540,7 @@ with st.sidebar:
     cred_badge_color = "#34d399" if (gemini_key or fc_key) else "#94a3b8"
     cred_badge_border = "rgba(16, 185, 129, 0.3)" if (gemini_key or fc_key) else "rgba(148, 163, 184, 0.25)"
     
-    st.markdown(
+    render_html(
         f"""
         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -546,8 +553,7 @@ with st.sidebar:
                 API keys are sealed and managed via encrypted environment configurations.
             </p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.markdown("---")
@@ -621,14 +627,13 @@ elif preset == "🌐 6: Live Fact-Check Cross-Reference (Shark on Freeway)":
 col_input, col_results = st.columns([1, 1.25], gap="large")
 
 with col_input:
-    st.markdown(
+    render_html(
         """
         <div class="eyebrow-pill">
             <span class="eyebrow-dot"></span>
             <span>MULTIMODAL INGESTION</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     
     input_text = st.text_area(
@@ -668,14 +673,13 @@ with col_input:
     analyze_btn = st.button("Run Multimodal Verification →", type="primary", use_container_width=True)
 
 with col_results:
-    st.markdown(
+    render_html(
         """
         <div class="eyebrow-pill">
             <span class="eyebrow-dot"></span>
             <span>INTELLIGENCE & FORENSIC DOSSIER</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     
     if analyze_btn:
@@ -751,51 +755,38 @@ with col_results:
                         else "#34d399"
                     )
 
-                    # Build Verified Forensic Basis Items
+                    # Build Verified Forensic Basis Items (No markdown code blocks)
                     basis_html = ""
                     if getattr(assessment, "basis_sources", None):
                         items_html = "".join([f"<li class='basis-item'>{s}</li>" for s in assessment.basis_sources])
-                        basis_html = f"""
-                        <div class="basis-tray">
-                            <div class="basis-heading">
-                                <span>🔍</span>
-                                <span>Verified Forensic Basis & Evidence Sources</span>
-                            </div>
-                            <ul class="basis-list">
-                                {items_html}
-                            </ul>
-                        </div>
-                        """
+                        basis_html = (
+                            "<div class='basis-tray'>"
+                            "<div class='basis-heading'><span>🔍</span><span>Verified Forensic Basis & Evidence Sources</span></div>"
+                            f"<ul class='basis-list'>{items_html}</ul>"
+                            "</div>"
+                        )
 
-                    # Render Apple-Tier Verdict Card (No powered by badge)
+                    # Render Apple-Tier Verdict Card (Pure HTML without indentation)
                     verdict_display = assessment.verdict.value.replace("_", " ")
-                    card_html = f"""
-                    <div class="verdict-outer {v_class}">
-                        <div class="verdict-inner">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
-                                <div>
-                                    <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #94a3b8;">
-                                        OVERALL FORENSIC VERDICT
-                                    </div>
-                                    <h2 class="verdict-title">{verdict_display}</h2>
-                                </div>
-                                <div style="text-align: right;">
-                                    <span class="metric-pill" style="color: {risk_color}; border-color: {risk_color}55;">
-                                        RISK: {assessment.risk_level.value}
-                                    </span>
-                                    <div style="margin-top: 6px;">
-                                        <span class="confidence-meter">Confidence: {int(assessment.confidence * 100)}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <p style="margin: 0; color: #e2e8f0; font-size: 0.96rem; line-height: 1.55;">
-                                {assessment.summary}
-                            </p>
-                            {basis_html}
-                        </div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    card_html = (
+                        f"<div class='verdict-outer {v_class}'>"
+                        f"<div class='verdict-inner'>"
+                        f"<div style='display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;'>"
+                        f"<div>"
+                        f"<div style='font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #94a3b8;'>OVERALL FORENSIC VERDICT</div>"
+                        f"<h2 class='verdict-title'>{verdict_display}</h2>"
+                        f"</div>"
+                        f"<div style='text-align: right;'>"
+                        f"<span class='metric-pill' style='color: {risk_color}; border-color: {risk_color}55;'>RISK: {assessment.risk_level.value}</span>"
+                        f"<div style='margin-top: 6px;'><span class='confidence-meter'>Confidence: {int(assessment.confidence * 100)}%</span></div>"
+                        f"</div>"
+                        f"</div>"
+                        f"<p style='margin: 0 0 12px 0; color: #e2e8f0; font-size: 0.96rem; line-height: 1.55;'>{assessment.summary}</p>"
+                        f"{basis_html}"
+                        f"</div>"
+                        f"</div>"
+                    )
+                    render_html(card_html)
 
                     # Verified Fact-Check Banner (ClaimReview debunks)
                     verified_fcs = [e for e in response_data.evidence if e.evidence_type == "VERIFIED_FACT_CHECK"]
@@ -806,19 +797,7 @@ with col_results:
                         banner_bg = "rgba(239, 68, 68, 0.12)" if direct_matches else "rgba(14, 165, 233, 0.12)"
                         banner_icon = "🚨" if direct_matches else "🌐"
 
-                        st.markdown(
-                            f"""
-                            <div style="background: {banner_bg}; border: 1px solid {banner_border}; border-radius: 16px; padding: 18px 22px; margin-bottom: 22px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 1.25rem;">{banner_icon}</span>
-                                    <strong style="color: #f8fafc; font-size: 1.05rem;">{banner_title} (ClaimReview Database)</strong>
-                                </div>
-                                <p style="color: #cbd5e1; font-size: 0.86rem; margin: 0 0 12px 0;">
-                                    {'This input claim directly corresponds to a verified debunk in ClaimReview archives:' if direct_matches else 'Independent fact-checkers investigated the following related rumors on this general topic:'}
-                                </p>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        fc_callouts_html = ""
                         for fc in verified_fcs:
                             meta = fc.metadata or {}
                             pub = meta.get("publisher", "Verified Fact-Checker")
@@ -828,31 +807,39 @@ with col_results:
                             is_direct = meta.get("is_direct_match", True)
                             date_val = meta.get("review_date", "")
                             date_str = f" &bull; <span style='color: #64748b;'>{date_val[:10]}</span>" if date_val else ""
-                            link_markup = f'<a href="{url}" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600; font-size: 0.85rem;">Read Verified Source Article ↗</a>' if url else ''
+                            link_markup = f"<a href='{url}' target='_blank' style='color: #38bdf8; text-decoration: underline; font-weight: 600; font-size: 0.85rem;'>Read Verified Source Article ↗</a>" if url else ""
                             
                             badge_bg = "rgba(239, 68, 68, 0.2)" if is_direct else "rgba(56, 189, 248, 0.15)"
                             badge_color = "#f87171" if is_direct else "#38bdf8"
                             badge_border = "#ef4444" if is_direct else "#0284c7"
                             badge_label = f"DIRECT MATCH &bull; RATING: {rating}" if is_direct else f"RELATED TOPIC &bull; RATING: {rating}"
-                            note_markup = "" if is_direct else '<div style="color: #94a3b8; font-size: 0.78rem; font-style: italic; margin-top: 4px;">ℹ️ Fact-checker evaluated a different rumor on this general topic, not your specific statement.</div>'
+                            note_markup = "" if is_direct else "<div style='color: #94a3b8; font-size: 0.78rem; font-style: italic; margin-top: 4px;'>ℹ️ Fact-checker evaluated a different rumor on this general topic, not your specific statement.</div>"
 
-                            st.markdown(
-                                f"""
-                                <div class="fc-callout {'fc-direct' if is_direct else ''}">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <strong style="color: #f8fafc; font-size: 0.95rem;">{pub}{date_str}</strong>
-                                        <span style="background: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border}; border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 0.78rem;">
-                                            {badge_label}
-                                        </span>
-                                    </div>
-                                    <div style="color: #cbd5e1; font-size: 0.85rem; margin: 6px 0;">Claim Reviewed: &ldquo;{claim}&rdquo;</div>
-                                    <div>{link_markup}</div>
-                                    {note_markup}
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            fc_callouts_html += (
+                                f"<div class='fc-callout {'fc-direct' if is_direct else ''}'>"
+                                f"<div style='display: flex; justify-content: space-between; align-items: center;'>"
+                                f"<strong style='color: #f8fafc; font-size: 0.95rem;'>{pub}{date_str}</strong>"
+                                f"<span style='background: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border}; border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 0.78rem;'>{badge_label}</span>"
+                                f"</div>"
+                                f"<div style='color: #cbd5e1; font-size: 0.85rem; margin: 6px 0;'>Claim Reviewed: &ldquo;{claim}&rdquo;</div>"
+                                f"<div>{link_markup}</div>"
+                                f"{note_markup}"
+                                f"</div>"
                             )
-                        st.markdown("</div>", unsafe_allow_html=True)
+
+                        fc_banner_html = (
+                            f"<div style='background: {banner_bg}; border: 1px solid {banner_border}; border-radius: 16px; padding: 18px 22px; margin-bottom: 22px;'>"
+                            f"<div style='display: flex; align-items: center; gap: 8px; margin-bottom: 8px;'>"
+                            f"<span style='font-size: 1.25rem;'>{banner_icon}</span>"
+                            f"<strong style='color: #f8fafc; font-size: 1.05rem;'>{banner_title} (ClaimReview Database)</strong>"
+                            f"</div>"
+                            f"<p style='color: #cbd5e1; font-size: 0.86rem; margin: 0 0 12px 0;'>"
+                            f"{'This input claim directly corresponds to a verified debunk in ClaimReview archives:' if direct_matches else 'Independent fact-checkers investigated the following related rumors on this general topic:'}"
+                            f"</p>"
+                            f"{fc_callouts_html}"
+                            f"</div>"
+                        )
+                        render_html(fc_banner_html)
 
                     # Primary Concerns
                     if assessment.primary_concerns:
@@ -867,7 +854,7 @@ with col_results:
 
                     with tab_findings:
                         for det_id, finding in response_data.findings.items():
-                            status_badge = f'<span class="status-badge status-{finding.status.value}">{finding.status.value}</span>'
+                            status_badge = f"<span class='status-badge status-{finding.status.value}'>{finding.status.value}</span>"
                             score_text = (
                                 f"{int(finding.manipulation_score * 100)}%"
                                 if finding.manipulation_score is not None
@@ -884,28 +871,24 @@ with col_results:
                                 else "#10b981"
                             )
 
-                            st.markdown(
-                                f"""
-                                <div class="detector-card">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                        <strong style="font-size: 1.05rem; color: #f8fafc;">{finding.detector_name}</strong>
-                                        <div>{status_badge}</div>
-                                    </div>
-                                    <p style="margin: 4px 0 10px 0; color: #cbd5e1; font-size: 0.88rem; line-height: 1.5;">
-                                        {finding.summary}
-                                    </p>
-                                    <div style="background: rgba(255,255,255,0.06); height: 5px; border-radius: 9999px; overflow: hidden; margin-bottom: 12px;">
-                                        <div style="background: {score_bar_color}; width: {score_bar_width}; height: 100%; border-radius: 9999px;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 24px; font-size: 0.82rem; color: #94a3b8;">
-                                        <span>Manipulation: <strong style="color: #38bdf8;">{score_text}</strong></span>
-                                        <span>Confidence: <strong style="color: #f1f5f9;">{int(finding.confidence * 100)}%</strong></span>
-                                        <span>Latency: <strong style="color: #f1f5f9;">{finding.execution_time_ms} ms</strong></span>
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            det_card_html = (
+                                f"<div class='detector-card'>"
+                                f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>"
+                                f"<strong style='font-size: 1.05rem; color: #f8fafc;'>{finding.detector_name}</strong>"
+                                f"<div>{status_badge}</div>"
+                                f"</div>"
+                                f"<p style='margin: 4px 0 10px 0; color: #cbd5e1; font-size: 0.88rem; line-height: 1.5;'>{finding.summary}</p>"
+                                f"<div style='background: rgba(255,255,255,0.06); height: 5px; border-radius: 9999px; overflow: hidden; margin-bottom: 12px;'>"
+                                f"<div style='background: {score_bar_color}; width: {score_bar_width}; height: 100%; border-radius: 9999px;'></div>"
+                                f"</div>"
+                                f"<div style='display: flex; gap: 24px; font-size: 0.82rem; color: #94a3b8;'>"
+                                f"<span>Manipulation: <strong style='color: #38bdf8;'>{score_text}</strong></span>"
+                                f"<span>Confidence: <strong style='color: #f1f5f9;'>{int(finding.confidence * 100)}%</strong></span>"
+                                f"<span>Latency: <strong style='color: #f1f5f9;'>{finding.execution_time_ms} ms</strong></span>"
+                                f"</div>"
+                                f"</div>"
                             )
+                            render_html(det_card_html)
                             if finding.metrics:
                                 with st.expander(f"Telemetry metrics for {finding.detector_name}", expanded=False):
                                     st.json(finding.metrics)
@@ -915,17 +898,15 @@ with col_results:
                             for ev in response_data.evidence:
                                 sev_color = "#ef4444" if ev.severity.value == "HIGH" else "#f59e0b" if ev.severity.value == "MEDIUM" else "#10b981"
                                 icon = "🌐" if ev.evidence_type == "VERIFIED_FACT_CHECK" else "🔬"
-                                st.markdown(
-                                    f"""
-                                    <div style="border-left: 4px solid {sev_color}; padding: 10px 18px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.45); border-radius: 6px;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <strong style="color: #f1f5f9; font-size: 0.92rem;">{icon} [{ev.evidence_type}] {ev.description}</strong>
-                                            <span style="font-size: 0.75rem; color: {sev_color}; font-weight: 700; border: 1px solid {sev_color}44; padding: 2px 8px; border-radius: 9999px;">{ev.severity.value}</span>
-                                        </div>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
+                                ev_card_html = (
+                                    f"<div style='border-left: 4px solid {sev_color}; padding: 10px 18px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.45); border-radius: 6px;'>"
+                                    f"<div style='display: flex; justify-content: space-between; align-items: center;'>"
+                                    f"<strong style='color: #f1f5f9; font-size: 0.92rem;'>{icon} [{ev.evidence_type}] {ev.description}</strong>"
+                                    f"<span style='font-size: 0.75rem; color: {sev_color}; font-weight: 700; border: 1px solid {sev_color}44; padding: 2px 8px; border-radius: 9999px;'>{ev.severity.value}</span>"
+                                    f"</div>"
+                                    f"</div>"
                                 )
+                                render_html(ev_card_html)
                                 if ev.metadata:
                                     if ev.evidence_type == "VERIFIED_FACT_CHECK" and ev.metadata.get("url"):
                                         st.markdown(f"🔗 **Fact-Check Reference:** [{ev.metadata.get('url')}]({ev.metadata.get('url')})")
@@ -968,44 +949,20 @@ with col_results:
 
                         t1, t2, t3, t4 = st.columns(4)
                         with t1:
-                            st.markdown(
-                                f"""
-                                <div class="telemetry-tile">
-                                    <div class="telemetry-label">2D FFT High-Freq</div>
-                                    <div class="telemetry-val">{syn_img_metrics.get("high_frequency_ratio", "N/A")}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            render_html(
+                                f"<div class='telemetry-tile'><div class='telemetry-label'>2D FFT High-Freq</div><div class='telemetry-val'>{syn_img_metrics.get('high_frequency_ratio', 'N/A')}</div></div>"
                             )
                         with t2:
-                            st.markdown(
-                                f"""
-                                <div class="telemetry-tile">
-                                    <div class="telemetry-label">ELA Residual</div>
-                                    <div class="telemetry-val">{syn_img_metrics.get("ela_max_error", "N/A")}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            render_html(
+                                f"<div class='telemetry-tile'><div class='telemetry-label'>ELA Residual</div><div class='telemetry-val'>{syn_img_metrics.get('ela_max_error', 'N/A')}</div></div>"
                             )
                         with t3:
-                            st.markdown(
-                                f"""
-                                <div class="telemetry-tile">
-                                    <div class="telemetry-label">Warping / Jitter</div>
-                                    <div class="telemetry-val">{df_metrics.get("morphological_warping", df_metrics.get("temporal_face_jitter", "N/A"))}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            render_html(
+                                f"<div class='telemetry-tile'><div class='telemetry-label'>Warping / Jitter</div><div class='telemetry-val'>{df_metrics.get('morphological_warping', df_metrics.get('temporal_face_jitter', 'N/A'))}</div></div>"
                             )
                         with t4:
-                            st.markdown(
-                                f"""
-                                <div class="telemetry-tile">
-                                    <div class="telemetry-label">DIDAN Delta</div>
-                                    <div class="telemetry-val">{consist_metrics.get("didan_discrepancy_score", "N/A")}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+                            render_html(
+                                f"<div class='telemetry-tile'><div class='telemetry-label'>DIDAN Delta</div><div class='telemetry-val'>{consist_metrics.get('didan_discrepancy_score', 'N/A')}</div></div>"
                             )
 
                     with tab_explanation:
