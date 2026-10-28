@@ -51,6 +51,7 @@ class MultimodalReasoner:
         local_findings: Dict[str, DetectorFinding],
         local_evidence: List[EvidenceItem],
         api_key_override: Optional[str] = None,
+        fact_checks: Optional[List[Dict[str, Any]]] = None,
         timeout_seconds: float = 30.0,
     ) -> Optional[Tuple[OverallAssessment, Explanation, List[EvidenceItem]]]:
         """
@@ -71,18 +72,29 @@ class MultimodalReasoner:
                 )
         signals_text = "\n".join(local_signals_summary) or "No local anomalies flagged."
 
+        fc_text = ""
+        if fact_checks:
+            fc_lines = [
+                f"- {fc.get('publisher')}: Rated '{fc.get('rating')}'. Claim reviewed: '{fc.get('claim')}' (Article: {fc.get('url')})"
+                for fc in fact_checks
+            ]
+            fc_text = "\nVERIFIED EXTERNAL FACT-CHECKS (CLAIMREVIEW ARCHIVES):\n" + "\n".join(fc_lines) + "\n"
+
         prompt_text = (
             "You are an expert multimodal digital forensics investigator and fact-checking intelligence engine. "
             "Evaluate the provided claim text and visual media asset for misinformation, generative synthesis, or out-of-context reuse.\n\n"
             f"CLAIM / CAPTION TEXT:\n\"\"\"{text or '[No text provided]'}\"\"\"\n\n"
-            f"LOCAL FORENSIC TELEMETRY OBSERVED:\n{signals_text}\n\n"
+            f"LOCAL FORENSIC TELEMETRY OBSERVED:\n{signals_text}\n"
+            f"{fc_text}\n"
             "INSTRUCTIONS:\n"
             "1. Cross-Modal Veracity: Does the visual evidence genuinely depict the claimed event, location, and entities? "
             "Are there discrepancies between what the caption asserts and what the media portrays?\n"
-            "2. Generative Synthesis / Deepfake: Inspect for AI diffusion artifacts (unnatural anatomy, warped geometry, "
+            "2. External Fact-Checks: If verified external fact-checks are provided above, explicitly cite the fact-checking "
+            "publisher and their rating in your rationale and supporting points.\n"
+            "3. Generative Synthesis / Deepfake: Inspect for AI diffusion artifacts (unnatural anatomy, warped geometry, "
             "synthetic skin sheen, prompt incoherence, blended boundaries, unnatural lighting).\n"
-            "3. Out-of-Context Reuse: Is this media likely recycled historical footage or photos misrepresented as breaking news?\n"
-            "4. Explanation: Provide a human-understandable, objective, journalistic explanation that clearly explains the verdict.\n\n"
+            "4. Out-of-Context Reuse: Is this media likely recycled historical footage or photos misrepresented as breaking news?\n"
+            "5. Explanation: Provide a human-understandable, objective, journalistic explanation that clearly explains the verdict.\n\n"
             "Output MUST be strict JSON matching this exact structure:\n"
             "{\n"
             "  \"verdict\": \"LIKELY_REAL\" | \"SUSPICIOUS\" | \"LIKELY_MANIPULATED\" | \"UNCERTAIN\",\n"

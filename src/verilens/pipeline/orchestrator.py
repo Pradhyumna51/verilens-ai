@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from verilens.detectors.base import DetectorInput
 from verilens.detectors.registry import registry
 from verilens.pipeline.reasoner import reasoner, MultimodalReasoner
+from verilens.pipeline.fact_check import fact_checker, FactChecker
 from verilens.schemas.response import (
     DetectorStatus,
     Verdict,
@@ -29,9 +30,14 @@ from verilens.core.logger import get_logger
 logger = get_logger("Orchestrator")
 
 class AnalysisPipeline:
-    def __init__(self, custom_reasoner: Optional[MultimodalReasoner] = None):
+    def __init__(
+        self,
+        custom_reasoner: Optional[MultimodalReasoner] = None,
+        custom_fact_checker: Optional[FactChecker] = None,
+    ):
         self.registry = registry
         self.reasoner = custom_reasoner or reasoner
+        self.fact_checker = custom_fact_checker or fact_checker
 
     def run(
         self,
@@ -42,6 +48,7 @@ class AnalysisPipeline:
         enabled_detectors: Optional[List[str]] = None,
         request_id: Optional[str] = None,
         api_key: Optional[str] = None,
+        fact_check_api_key: Optional[str] = None,
     ) -> AnalysisResponse:
         start_time = time.perf_counter()
         req_id = request_id or f"req_{uuid.uuid4().hex[:8]}"
@@ -84,10 +91,37 @@ class AnalysisPipeline:
             if finding.status == DetectorStatus.NOT_RUN:
                 untested_modalities.append(f"{detector.detector_name}: {finding.summary}")
 
+        # External Fact-Checking Intelligence (Google Fact Check Tools API)
+        fc_records = []
+        fc_dicts = []
+        if text and len(text.strip()) >= 5 and self.fact_checker.is_available(override_key=fact_check_api_key):
+            try:
+                fc_records = self.fact_checker.search(text, api_key_override=fact_check_api_key)
+                if fc_records:
+                    fc_evidence = self.fact_checker.to_evidence(fc_records)
+                    all_evidence.extend(fc_evidence)
+                    fc_dicts = [
+                        {
+                            "publisher": r.publisher,
+                            "rating": r.rating,
+                            "claim": r.claim,
+                            "url": r.url,
+                            "title": r.title,
+                        }
+                        for r in fc_records
+                    ]
+            except Exception as exc:
+                logger.warning(f"Fact check search failed: {exc}")
+
         # Signal Fusion and Assessment
-        overall_assessment = self._fuse_assessment(findings)
+        overall_assessment = self._fuse_assessment(findings, fact_checks=fc_records)
         explanation = self._generate_explanation(findings, all_evidence, overall_assessment)
         limitations = self._derive_limitations(findings, untested_modalities)
+
+        if fc_records:
+            limitations.model_assumptions.append(
+                f"Cross-referenced with {len(fc_records)} verified ClaimReview fact-check publisher records."
+            )
 
         # Multimodal AI Cognitive Reasoning Layer (if API key available)
         if self.reasoner.is_available(override_key=api_key):
@@ -98,6 +132,7 @@ class AnalysisPipeline:
                 local_findings=findings,
                 local_evidence=all_evidence,
                 api_key_override=api_key,
+                fact_checks=fc_dicts if fc_dicts else None,
             )
             if ai_result:
                 ai_assessment, ai_explanation, extra_evidence = ai_result
@@ -122,15 +157,39 @@ class AnalysisPipeline:
             limitations=limitations,
         )
 
-    def _fuse_assessment(self, findings: Dict[str, DetectorFinding]) -> OverallAssessment:
+    def _fuse_assessment(
+        self,
+        findings: Dict[str, DetectorFinding],
+        fact_checks: Optional[List[Any]] = None,
+    ) -> OverallAssessment:
         scored_findings = [
             f for f in findings.values()
             if f.status == DetectorStatus.SUCCESS and f.manipulation_score is not None
         ]
 
         primary_concerns: List[str] = []
+        high_severity_fcs = [
+            r for r in (fact_checks or [])
+            if getattr(r, "severity", None) == EvidenceSeverity.HIGH
+        ]
 
         if not scored_findings:
+            if high_severity_fcs:
+                top_fc = high_severity_fcs[0]
+                primary_concerns.append(
+                    f"Verified Fact-Check ({top_fc.publisher}): Rated '{top_fc.rating}'."
+                )
+                return OverallAssessment(
+                    verdict=Verdict.LIKELY_MANIPULATED,
+                    confidence=0.92,
+                    risk_level=RiskLevel.HIGH,
+                    summary=(
+                        f"Claim matches verified debunk in ClaimReview archive by "
+                        f"{top_fc.publisher} (Rating: '{top_fc.rating}')."
+                    ),
+                    primary_concerns=primary_concerns,
+                )
+
             # If no detector could produce a conclusive score
             uncertain_findings = [f for f in findings.values() if f.status == DetectorStatus.UNCERTAIN]
             if uncertain_findings:
@@ -162,8 +221,16 @@ class AnalysisPipeline:
             if (f.manipulation_score or 0.0) >= 0.50:
                 primary_concerns.append(f"{f.detector_name}: {f.summary}")
 
+        if high_severity_fcs:
+            top_fc = high_severity_fcs[0]
+            primary_concerns.insert(
+                0, f"Verified Fact-Check ({top_fc.publisher}): Rated '{top_fc.rating}'."
+            )
+            weighted_score_sum += 0.95 * 2.0
+            total_weight += 2.0
+
         agg_score = weighted_score_sum / max(1e-5, total_weight)
-        agg_confidence = confidence_sum / len(scored_findings)
+        agg_confidence = max(confidence_sum / len(scored_findings), 0.88 if high_severity_fcs else 0.0)
 
         # Determine Verdict
         if agg_score >= 0.75:

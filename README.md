@@ -68,17 +68,21 @@ Misinformation increasingly spreads across mixed modalities (e.g. caption-media 
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment (Optional Free AI Reasoning)
-Copy `.env.example` to `.env` to enable Google Gemini 2.0 Flash (100% Free tier on Google AI Studio):
+### 2. Configure Environment (Optional Free AI Reasoning & Fact-Checking)
+Copy `.env.example` to `.env` to enable Google Gemini 2.5 Flash and Google Fact Check Tools API (both 100% Free):
 ```bash
 cp .env.example .env
 ```
-*(If left empty, VeriLens AI runs in 100% offline local forensic ensemble mode).*
+- **Gemini API Key**: Free at [Google AI Studio](https://aistudio.google.com/) for multimodal reasoning and rich explanations.
+- **Fact Check Tools API Key**: Free at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) for live ClaimReview debunks (Reuters, Snopes, AP, USA Today).
+
+*(If left unconfigured, VeriLens AI runs in 100% offline local forensic ensemble mode).*
 
 ### 3. Run the Test Suite
 ```bash
 python -m pytest -v
 ```
+*(76 comprehensive automated unit and integration tests passing at 100%).*
 
 ### 4. 1-Click Launch (Windows)
 Double-click `start.bat` or run:
@@ -109,6 +113,7 @@ The Streamlit sidebar includes one-click presets covering key edge cases:
 3. **✍️ Synthetic AI Text**: Demonstrates statistical burstiness and machine cadence detection.
 4. **🛡️ Authentic Natural Media Baseline**: Demonstrates clean execution without false alarms.
 5. **⚠️ Low-Resolution Thumbnail & Brief Text**: Demonstrates `UNCERTAIN` status handling when inputs fall below operational thresholds.
+6. **🌐 Live Fact-Check Cross-Reference (Shark on Freeway)**: Demonstrates live cross-referencing against Google Fact Check Tools (ClaimReview) with certified debunks from Snopes and USA Today.
 
 ---
 

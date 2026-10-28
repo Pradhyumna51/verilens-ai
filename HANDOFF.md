@@ -21,18 +21,23 @@ The core architecture, API gateway, pipeline orchestrator, detector registry, St
      - `UNCERTAIN`: Input present but below operational threshold (e.g. text < 15 words, < 32×32 thumbnail, zero-variance flat image).
      - `ERROR`: Corrupted bytes or runtime exception (isolated, never crashes pipeline).
      - `SUCCESS`: Algorithmic analysis executed with real metrics and confidence.
-3. **5 Functional Detectors**:
+3. **6 Functional Detectors & Forensics**:
    - [`SyntheticTextDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/synthetic_text.py): Burstiness index, lexical diversity (Type-Token Ratio), repetitive n-grams, and AI stylistic markers.
    - [`MediaReuseDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/media_reuse.py): Perceptual `dHash`, `aHash`, and EXIF metadata/provenance parsing.
    - [`SyntheticImageDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/synthetic_image.py): 2D FFT spectral high-frequency ratio and Laplacian residual variance with lazy pretrained hook.
    - [`ConsistencyDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/consistency.py): Cross-modal caption vs visual scene analysis (luminance/chroma contradiction) with lazy CLIP hook.
    - [`DeepfakeDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/deepfake.py): Skin candidate segmentation and facial boundary edge transition gradient.
-4. **FastAPI Backend Server**:
+   - [`OCRDetector`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/detectors/ocr.py): Text in image extraction and temporal/topical conflict detection.
+4. **Google Fact Check Tools API Integration**:
+   - [`FactChecker`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/fact_check.py): Live cross-referencing against Google News Initiative's ClaimReview database (Snopes, Reuters, AP, USA Today). Directly attaches verified debunks as `VERIFIED_FACT_CHECK` evidence items with clickable article URLs.
+5. **Cognitive Multimodal Reasoner (Gemini 2.5 Flash)**:
+   - [`MultimodalReasoner`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/pipeline/reasoner.py): Combines local detector signals, image pixels, and external verified fact-checks into a holistic investigative assessment with human-understandable rationale.
+6. **FastAPI Backend Server**:
    - [`src/verilens/api/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/src/verilens/api/app.py): Exposes `GET /health` and `POST /analyze` with multipart upload limits (25MB media, 100k char text), MIME type validation, and CORS.
-5. **Interactive Streamlit UI**:
-   - [`ui/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/ui/app.py): Dark-tech dashboard featuring 5 judge-ready evaluation presets, verdict glow cards, findings breakdown, evidence inspector, and raw JSON export.
-6. **Automated Smoke Test Suite**:
-   - [`tests/test_smoke.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/tests/test_smoke.py): 11 tests covering health, text analysis, multimodal analysis, upload limits, error handling, and all 4 detector states.
+7. **Interactive Streamlit UI**:
+   - [`ui/app.py`](file:///c:/Users/priyanka/OneDrive/Desktop/Projects/verilens-ai/ui/app.py): Dark-tech dashboard featuring 6 judge-ready evaluation presets, verdict glow cards, verified fact-check match callouts, findings breakdown, evidence inspector, and raw JSON export.
+8. **Automated Test Suite (76 Passing Tests)**:
+   - 76 tests covering all detectors, reasoner, fact-checker, OCR, upload limits, error handling, and operational boundaries.
 
 ---
 

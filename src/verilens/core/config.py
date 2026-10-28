@@ -30,6 +30,10 @@ class Settings:
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", None)
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     GEMINI_API_BASE: str = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    # Optional Google Fact Check Tools API (100% Free)
+    FACT_CHECK_API_KEY: Optional[str] = os.getenv("FACT_CHECK_API_KEY", None)
+    FACT_CHECK_API_BASE: str = "https://factchecktools.googleapis.com/v1alpha1"
     
     # Perceptual hash cache
     ENABLE_REUSE_CACHE: bool = True

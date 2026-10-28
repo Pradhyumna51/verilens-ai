@@ -139,6 +139,14 @@ def generate_sample_image(sample_type: str) -> bytes:
         # Under threshold resolution
         img = Image.new("RGB", (20, 20), color=(128, 128, 128))
         img.save(buf, format="PNG")
+    elif sample_type == "shark_highway":
+        # Flooded asphalt roadway with water gradient
+        arr = np.zeros((256, 256, 3), dtype=np.uint8)
+        for y in range(256):
+            for x in range(256):
+                arr[y, x] = [int(30 + 40 * (y / 256)), int(70 + 80 * (x / 256)), int(120 + 60 * (y / 256))]
+        img = Image.fromarray(arr)
+        img.save(buf, format="JPEG")
     return buf.getvalue()
 
 # Header
@@ -180,12 +188,25 @@ with st.sidebar:
         "Gemini API Key (Optional)",
         value=settings.GEMINI_API_KEY or "",
         type="password",
-        help="Free key from Google AI Studio (aistudio.google.com). When set, enables Gemini 2.0 Flash multimodal reasoning and explanation generation. When empty, runs fast local offline forensics.",
+        help="Free key from Google AI Studio (aistudio.google.com). When set, enables Gemini 2.5 Flash multimodal reasoning and explanation generation. When empty, runs fast local offline forensics.",
     )
     if gemini_key:
-        st.markdown('<span style="color: #34d399; font-size: 0.85rem; font-weight: 600;">✨ Gemini 2.0 Flash Active (Multimodal)</span>', unsafe_allow_html=True)
+        st.markdown('<span style="color: #34d399; font-size: 0.85rem; font-weight: 600;">✨ Gemini 2.5 Flash Active (Multimodal)</span>', unsafe_allow_html=True)
     else:
         st.markdown('<span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600;">🛡️ Local Forensics Ensemble (Offline)</span>', unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### 🌐 Fact Check Intelligence")
+    fc_key = st.text_input(
+        "Google Fact Check API Key (Optional)",
+        value=settings.FACT_CHECK_API_KEY or "",
+        type="password",
+        help="Google Fact Check Tools API key (free from Google Cloud / News Initiative). Enables live cross-referencing against ClaimReview databases (Reuters, Snopes, AP, USA Today, etc.).",
+    )
+    if fc_key:
+        st.markdown('<span style="color: #38bdf8; font-size: 0.85rem; font-weight: 600;">🌐 Google Fact Check Tools Active</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600;">⚪ Fact Check Query Disabled</span>', unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("### 🎯 Quick Evaluation Presets")
@@ -200,6 +221,7 @@ with st.sidebar:
             "✍️ 3: Synthetic AI Text (Monotone Essay)",
             "🛡️ 4: Authentic Natural Media Baseline",
             "⚠️ 5: Low-Res Thumbnail (UNCERTAIN status)",
+            "🌐 6: Live Fact-Check Cross-Reference (Shark on Freeway)",
         ],
     )
 
@@ -244,6 +266,10 @@ elif preset == "⚠️ 5: Low-Res Thumbnail (UNCERTAIN status)":
     preset_text = "Short text."
     preset_image_bytes = generate_sample_image("tiny_thumbnail")
     preset_image_name = "pixel_thumbnail.png"
+elif preset == "🌐 6: Live Fact-Check Cross-Reference (Shark on Freeway)":
+    preset_text = "Shark swimming on highway after hurricane"
+    preset_image_bytes = generate_sample_image("shark_highway")
+    preset_image_name = "shark_flooded_freeway.jpg"
 
 # Main Layout
 col_input, col_results = st.columns([1, 1.25], gap="large")
@@ -306,7 +332,11 @@ with col_results:
                             "enabled_detectors": ",".join(enabled_detector_ids),
                             "api_key": gemini_key or "",
                         }
-                        headers = {"x-gemini-api-key": gemini_key} if gemini_key else {}
+                        headers = {}
+                        if gemini_key:
+                            headers["x-gemini-api-key"] = gemini_key
+                        if fc_key:
+                            headers["x-fact-check-api-key"] = fc_key
                         res = requests.post(f"{api_url}/analyze", data=data, files=files, headers=headers, timeout=25)
                         if res.status_code == 200:
                             response_data = AnalysisResponse(**res.json())
@@ -323,6 +353,7 @@ with col_results:
                         media_content_type=active_media_type,
                         enabled_detectors=enabled_detector_ids,
                         api_key=gemini_key or None,
+                        fact_check_api_key=fc_key or None,
                     )
 
                 if response_data:
@@ -331,7 +362,7 @@ with col_results:
                     
                     ai_enhanced = any("Gemini" in a for a in response_data.limitations.model_assumptions) or any("gemini" in str(e.metadata) for e in response_data.evidence)
                     engine_badge = (
-                        '<span style="display:inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">✨ Powered by Gemini 2.0 Flash Multimodal Forensics</span>'
+                        '<span style="display:inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">✨ Powered by Gemini 2.5 Flash Multimodal Forensics</span>'
                         if ai_enhanced
                         else '<span style="display:inline-block; background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid #64748b; padding: 4px 12px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">🛡️ Powered by Local Forensic Ensemble</span>'
                     )
@@ -366,6 +397,49 @@ with col_results:
                         """,
                         unsafe_allow_html=True,
                     )
+
+                    # Verified Fact-Check Banner (if ClaimReview debunks found)
+                    verified_fcs = [e for e in response_data.evidence if e.evidence_type == "VERIFIED_FACT_CHECK"]
+                    if verified_fcs:
+                        st.markdown(
+                            """
+                            <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid #0ea5e9; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <span style="font-size: 1.25rem;">🌐</span>
+                                    <strong style="color: #38bdf8; font-size: 1.05rem;">Verified Fact-Check Publisher Records Found (Google Fact Check Tools)</strong>
+                                </div>
+                                <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0 0 12px 0;">
+                                    This claim was cross-referenced against verified independent news publishers indexed via the ClaimReview database:
+                                </p>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        for fc in verified_fcs:
+                            meta = fc.metadata or {}
+                            pub = meta.get("publisher", "Verified Fact-Checker")
+                            rating = meta.get("rating", "Unrated")
+                            url = meta.get("url", "")
+                            claim = meta.get("claim", "")
+                            date_val = meta.get("review_date", "")
+                            date_str = f" &bull; <span style='color: #64748b;'>{date_val[:10]}</span>" if date_val else ""
+                            link_markup = f'<a href="{url}" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600; font-size: 0.85rem;">Read Verified Debunk Article ↗</a>' if url else ''
+                            
+                            st.markdown(
+                                f"""
+                                <div style="background: rgba(15, 23, 42, 0.65); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <strong style="color: #f8fafc; font-size: 0.95rem;">{pub}{date_str}</strong>
+                                        <span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 0.78rem;">
+                                            RATING: {rating}
+                                        </span>
+                                    </div>
+                                    <div style="color: #94a3b8; font-size: 0.85rem; margin: 6px 0;">Claim: &ldquo;{claim}&rdquo;</div>
+                                    <div>{link_markup}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                     # Primary Concerns
                     if assessment.primary_concerns:
@@ -416,11 +490,12 @@ with col_results:
                         if response_data.evidence:
                             for ev in response_data.evidence:
                                 sev_color = "#ef4444" if ev.severity.value == "HIGH" else "#f59e0b" if ev.severity.value == "MEDIUM" else "#10b981"
+                                icon = "🌐" if ev.evidence_type == "VERIFIED_FACT_CHECK" else "🔬"
                                 st.markdown(
                                     f"""
                                     <div style="border-left: 4px solid {sev_color}; padding: 8px 16px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.4); border-radius: 4px;">
                                         <div style="display: flex; justify-content: space-between;">
-                                            <strong style="color: #f1f5f9;">[{ev.evidence_type}] {ev.description}</strong>
+                                            <strong style="color: #f1f5f9;">{icon} [{ev.evidence_type}] {ev.description}</strong>
                                             <span style="font-size: 0.75rem; color: {sev_color}; font-weight: bold;">{ev.severity.value}</span>
                                         </div>
                                     </div>
@@ -428,7 +503,10 @@ with col_results:
                                     unsafe_allow_html=True,
                                 )
                                 if ev.metadata:
-                                    st.caption(f"Evidence Metadata: {json.dumps(ev.metadata)}")
+                                    if ev.evidence_type == "VERIFIED_FACT_CHECK" and ev.metadata.get("url"):
+                                        st.markdown(f"🔗 **Fact-Check Article:** [{ev.metadata.get('url')}]({ev.metadata.get('url')})")
+                                    else:
+                                        st.caption(f"Evidence Metadata: {json.dumps(ev.metadata)}")
                         else:
                             st.info("No concrete evidentiary anomalies extracted for this input.")
 

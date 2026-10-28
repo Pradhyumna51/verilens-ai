@@ -126,6 +126,7 @@ async def analyze(
             )
 
     active_api_key = api_key or request.headers.get("x-gemini-api-key") or request.headers.get("x-api-key")
+    fc_api_key = request.headers.get("x-fact-check-api-key")
 
     try:
         response = pipeline.run(
@@ -135,6 +136,7 @@ async def analyze(
             media_content_type=media_content_type,
             enabled_detectors=active_detectors,
             api_key=active_api_key,
+            fact_check_api_key=fc_api_key,
         )
         return response
     except Exception as exc:
