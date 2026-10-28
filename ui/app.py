@@ -103,6 +103,18 @@ st.markdown(
         padding: 16px;
         margin-bottom: 12px;
     }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .status-pill-online { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; }
+    .status-pill-offline { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #f59e0b; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -117,7 +129,7 @@ def generate_sample_image(sample_type: str) -> bytes:
         for y in range(256):
             for x in range(256):
                 val = int((np.sin(x / 2.0) * np.cos(y / 2.0) + 1.0) * 127)
-                arr[y, x] = [val, (val * 2) % 255, 255 - val]
+                arr[y, x] = [int(val * 0.7), (val * 2) % 255, 255 - int(val * 0.3)]
         img = Image.fromarray(arr)
         img.save(buf, format="PNG")
     elif sample_type == "recycled_news":
@@ -126,20 +138,28 @@ def generate_sample_image(sample_type: str) -> bytes:
         draw = ImageDraw.Draw(img)
         draw.rectangle([40, 40, 280, 200], fill=(70, 130, 200), outline=(255, 255, 255))
         draw.text((60, 110), "HISTORICAL ARCHIVE 2019", fill=(255, 255, 255))
-        img.save(buf, format="JPEG")
+        exif = img.getexif()
+        exif[0x0131] = "Historical Archive Suite 2019"
+        img.save(buf, format="JPEG", exif=exif)
     elif sample_type == "natural_photo":
-        # Smooth photographic gradient
-        arr = np.zeros((256, 256, 3), dtype=np.uint8)
-        for y in range(256):
-            for x in range(256):
-                arr[y, x] = [int(100 + 100 * (y / 256)), int(120 + 80 * (x / 256)), 180]
-        img = Image.fromarray(arr)
-        img.save(buf, format="JPEG")
+        # Clean photographic landscape with daylight sky and green hill
+        img = Image.new("RGB", (256, 256))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([0, 0, 256, 128], fill=(135, 206, 235))
+        draw.rectangle([0, 128, 256, 256], fill=(34, 139, 34))
+        img.save(buf, format="JPEG", quality=92)
     elif sample_type == "tiny_thumbnail":
         # Under threshold resolution
         img = Image.new("RGB", (20, 20), color=(128, 128, 128))
         img.save(buf, format="PNG")
     return buf.getvalue()
+
+def check_api_health(url: str) -> bool:
+    try:
+        r = requests.get(f"{url}/health", timeout=1.2)
+        return r.status_code == 200
+    except Exception:
+        return False
 
 # Header
 st.markdown(
@@ -173,6 +193,19 @@ with st.sidebar:
         index=0,
     )
     api_url = st.text_input("FastAPI Base URL", value="http://127.0.0.1:8000")
+
+    # Backend connectivity check
+    is_api_online = check_api_health(api_url)
+    if is_api_online:
+        st.markdown(
+            f'<div class="status-pill status-pill-online">● Backend Online ({api_url})</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="status-pill status-pill-offline">● Backend Offline &mdash; Mock Fallback Ready</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown("### 🎯 Quick Evaluation Presets")
@@ -224,13 +257,22 @@ elif preset == "✍️ 3: Synthetic AI Text (Monotone Essay)":
         "Therefore, one must appreciate the multifaceted dynamics governing our contemporary algorithmic reality."
     )
 elif preset == "🛡️ 4: Authentic Natural Media Baseline":
-    preset_text = "A serene view of an afternoon lake scene captured during a weekend hike."
+    preset_text = "A serene view of an afternoon lake scene captured during a weekend hike across the national park."
     preset_image_bytes = generate_sample_image("natural_photo")
     preset_image_name = "natural_landscape.jpg"
 elif preset == "⚠️ 5: Low-Res Thumbnail (UNCERTAIN status)":
     preset_text = "Short text."
     preset_image_bytes = generate_sample_image("tiny_thumbnail")
     preset_image_name = "pixel_thumbnail.png"
+
+# Session state handling for preset text sync
+if "last_selected_preset" not in st.session_state:
+    st.session_state["last_selected_preset"] = preset
+    st.session_state["active_input_text"] = preset_text
+
+if preset != st.session_state["last_selected_preset"]:
+    st.session_state["last_selected_preset"] = preset
+    st.session_state["active_input_text"] = preset_text
 
 # Main Layout
 col_input, col_results = st.columns([1, 1.25], gap="large")
@@ -240,7 +282,7 @@ with col_input:
     
     input_text = st.text_area(
         "Headline / Claim / Caption Text",
-        value=preset_text,
+        value=st.session_state.get("active_input_text", preset_text),
         height=140,
         placeholder="Enter news text, social media caption, or claim to analyze...",
     )
@@ -281,9 +323,9 @@ with col_results:
         else:
             with st.spinner("Executing active detector ensemble..."):
                 response_data = None
+                fallback_engaged = False
                 
                 if execution_mode.startswith("FastAPI"):
-                    # Call via REST API
                     try:
                         files = {}
                         if active_media_bytes:
@@ -292,15 +334,19 @@ with col_results:
                             "text": input_text,
                             "enabled_detectors": ",".join(enabled_detector_ids),
                         }
-                        res = requests.post(f"{api_url}/analyze", data=data, files=files, timeout=20)
+                        res = requests.post(f"{api_url}/analyze", data=data, files=files, timeout=4)
                         if res.status_code == 200:
                             response_data = AnalysisResponse(**res.json())
                         else:
-                            st.error(f"API Error ({res.status_code}): {res.text}")
-                    except Exception as err:
-                        st.error(f"Failed to connect to FastAPI at {api_url}: {err}")
-                else:
-                    # Run direct in-memory pipeline
+                            fallback_engaged = True
+                    except Exception:
+                        fallback_engaged = True
+
+                # Automatic fallback when offline or direct mode selected
+                if response_data is None:
+                    if execution_mode.startswith("FastAPI"):
+                        st.info(f"⚡ FastAPI backend at {api_url} is offline or unreachable. Automatically engaged in-memory mock fallback.")
+                    
                     response_data = pipeline.run(
                         text=input_text,
                         media_bytes=active_media_bytes,
@@ -313,7 +359,7 @@ with col_results:
                     assessment = response_data.overall_assessment
                     v_class = f"verdict-{assessment.verdict.value}"
                     
-                    # Verdict Card
+                    # Overall Risk Assessment Card (verdict badge, risk level, confidence score)
                     st.markdown(
                         f"""
                         <div class="verdict-card {v_class}">
@@ -347,11 +393,12 @@ with col_results:
                             for c in assessment.primary_concerns:
                                 st.markdown(f"- {c}")
 
-                    # Tabs for detailed inspection
+                    # Detailed inspection tabs
                     tab_findings, tab_evidence, tab_explanation, tab_limitations, tab_json = st.tabs(
                         ["🧩 Findings", "🔬 Evidence", "💡 Rationale", "⚠️ Limitations", "🔌 JSON"]
                     )
 
+                    # Structured Detector Cards (SUCCESS, UNCERTAIN, NOT_RUN, ERROR)
                     with tab_findings:
                         for det_id, finding in response_data.findings.items():
                             status_badge = f'<span class="badge badge-status-{finding.status.value}">{finding.status.value}</span>'
@@ -379,13 +426,14 @@ with col_results:
                                         <span>Latency: <strong>{finding.execution_time_ms} ms</strong></span>
                                     </div>
                                 </div>
-                                """,
+                                "",
                                 unsafe_allow_html=True,
                             )
                             if finding.metrics:
                                 with st.expander(f"Metrics for {finding.detector_name}", expanded=False):
                                     st.json(finding.metrics)
 
+                    # Concrete Evidence Bullet Points
                     with tab_evidence:
                         if response_data.evidence:
                             for ev in response_data.evidence:
@@ -406,6 +454,7 @@ with col_results:
                         else:
                             st.info("No concrete evidentiary anomalies extracted for this input.")
 
+                    # Natural Language Explanation Driven Purely by Active Detector Findings
                     with tab_explanation:
                         st.markdown(f"#### {response_data.explanation.headline}")
                         st.write(response_data.explanation.rationale)
@@ -413,13 +462,20 @@ with col_results:
                         col_supp, col_count = st.columns(2)
                         with col_supp:
                             st.markdown("**Supporting Points:**")
-                            for sp in response_data.explanation.supporting_points:
-                                st.markdown(f"- {sp}")
+                            if response_data.explanation.supporting_points:
+                                for sp in response_data.explanation.supporting_points:
+                                    st.markdown(f"- {sp}")
+                            else:
+                                st.caption("No manipulation points flagged.")
                         with col_count:
                             st.markdown("**Counter-Evidence / Baseline Notes:**")
-                            for cp in response_data.explanation.counter_evidence:
-                                st.markdown(f"- {cp}")
+                            if response_data.explanation.counter_evidence:
+                                for cp in response_data.explanation.counter_evidence:
+                                    st.markdown(f"- {cp}")
+                            else:
+                                st.caption("No mitigating baseline signals noted.")
 
+                    # Explicit Limitations List
                     with tab_limitations:
                         st.markdown("#### System Governance & Limitations")
                         for disc in response_data.limitations.disclaimers:
@@ -428,9 +484,14 @@ with col_results:
                             st.markdown("**Untested Modalities in this Request:**")
                             for um in response_data.limitations.untested_modalities:
                                 st.markdown(f"- ⚠️ {um}")
+                        if response_data.limitations.model_assumptions:
+                            st.markdown("**Model Assumptions:**")
+                            for ma in response_data.limitations.model_assumptions:
+                                st.markdown(f"- 🔍 {ma}")
                         if response_data.limitations.human_verification_recommended:
                             st.warning("Human-in-the-Loop review is strongly advised prior to definitive enforcement.")
 
+                    # Raw Schema Conformance JSON
                     with tab_json:
                         json_str = response_data.model_dump_json(indent=2)
                         st.code(json_str, language="json")

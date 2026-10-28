@@ -143,22 +143,31 @@ class AnalysisPipeline:
         agg_score = weighted_score_sum / max(1e-5, total_weight)
         agg_confidence = confidence_sum / len(scored_findings)
 
+        max_score = max((f.manipulation_score or 0.0) for f in scored_findings) if scored_findings else 0.0
+
+        if max_score >= 0.75:
+            effective_score = max(agg_score, 0.70 * max_score + 0.30 * agg_score)
+        elif max_score >= 0.50:
+            effective_score = max(agg_score, max_score)
+        else:
+            effective_score = agg_score
+
         # Determine Verdict
-        if agg_score >= 0.75:
+        if effective_score >= 0.75:
             verdict = Verdict.LIKELY_MANIPULATED
-        elif agg_score >= 0.50:
+        elif effective_score >= 0.50:
             verdict = Verdict.SUSPICIOUS
-        elif agg_score < 0.25:
+        elif effective_score < 0.25:
             verdict = Verdict.LIKELY_REAL
         else:
             verdict = Verdict.UNCERTAIN
 
         # Determine Risk Level
-        if agg_score >= 0.85:
+        if effective_score >= 0.85:
             risk = RiskLevel.CRITICAL
-        elif agg_score >= 0.60:
+        elif effective_score >= 0.60:
             risk = RiskLevel.HIGH
-        elif agg_score >= 0.30:
+        elif effective_score >= 0.30:
             risk = RiskLevel.MEDIUM
         else:
             risk = RiskLevel.LOW
